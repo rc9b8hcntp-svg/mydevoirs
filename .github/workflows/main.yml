@@ -1,0 +1,97 @@
+name: Construire Mes Devoirs (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Installer les dépendances
+        run: npm install --no-audit --no-fund
+
+      - name: Construire MSI + portable (x64, x86 et ARM64)
+        run: npx electron-builder --win --x64 --ia32 --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Lister les fichiers produits
+        shell: bash
+        run: ls -la dist
+
+      - name: Vérifier que les MSI existent
+        shell: bash
+        run: |
+          for a in x64 ia32 arm64; do
+            f=$(ls dist/MesDevoirs-Installeur-*-$a.msi 2>/dev/null | head -n 1)
+            if [ -z "$f" ]; then echo "::error::MSI $a introuvable dans dist/"; exit 1; fi
+          done
+
+      - name: Envoyer les fichiers (x64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MesDevoirs-x64
+          path: |
+            dist/*-x64.msi
+            dist/*-x64.exe
+          if-no-files-found: error
+
+      - name: Envoyer les fichiers (x86 / 32 bits)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MesDevoirs-x86-32bits
+          path: |
+            dist/*-ia32.msi
+            dist/*-ia32.exe
+          if-no-files-found: error
+
+      - name: Envoyer les fichiers (ARM64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MesDevoirs-ARM64
+          path: |
+            dist/*-arm64.msi
+            dist/*-arm64.exe
+          if-no-files-found: error
+
+      - name: Déterminer le tag de la release
+        id: rel
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            V=$(node -p "require('./package.json').version")
+            echo "tag=v${V}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publier la release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rel.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Mes Devoirs ${{ steps.rel.outputs.tag }}
+          files: |
+            dist/*.msi
+            dist/*.exe
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          generate_release_notes: true
