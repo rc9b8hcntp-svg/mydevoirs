@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes Devoirs</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">📚</span>
+        <h1>Mes Devoirs</h1>
+      </div>
+      <div class="stats" id="stats"></div>
+      <button class="icon-btn" id="themeBtn" title="Changer de thème" aria-label="Changer de thème">🌙</button>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <button class="primary" id="newBtn">＋ Nouveau devoir</button>
+
+        <nav class="filters" id="filters">
+          <button data-filter="todo" class="active">À faire <span class="count" id="c-todo">0</span></button>
+          <button data-filter="late">En retard <span class="count" id="c-late">0</span></button>
+          <button data-filter="week">Cette semaine <span class="count" id="c-week">0</span></button>
+          <button data-filter="done">Terminés <span class="count" id="c-done">0</span></button>
+          <button data-filter="all">Tous <span class="count" id="c-all">0</span></button>
+        </nav>
+
+        <div class="side-block">
+          <h3>Matières</h3>
+          <div id="subjectList" class="subject-list"></div>
+        </div>
+
+        <button class="ghost small" id="clearDone">🧹 Supprimer les terminés</button>
+      </aside>
+
+      <section class="content">
+        <div class="toolbar">
+          <input type="search" id="search" placeholder="Rechercher un devoir…" autocomplete="off">
+          <select id="sort" aria-label="Trier">
+            <option value="date">Trier par date</option>
+            <option value="priority">Trier par priorité</option>
+            <option value="subject">Trier par matière</option>
+            <option value="created">Plus récents d'abord</option>
+          </select>
+        </div>
+        <ul id="list" class="list"></ul>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-emoji">🎉</div>
+          <p id="emptyText">Rien à afficher ici.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="dialog">
+    <form method="dialog" id="form" autocomplete="off">
+      <h2 id="dialogTitle">Nouveau devoir</h2>
+
+      <label>Titre
+        <input type="text" id="f-title" required maxlength="120" placeholder="Ex : Exercices 3 à 7 page 142">
+      </label>
+
+      <div class="row">
+        <label>Matière
+          <input type="text" id="f-subject" list="subjectsData" maxlength="40" placeholder="Maths, Français…">
+          <datalist id="subjectsData"></datalist>
+        </label>
+        <label>Pour le
+          <input type="date" id="f-date">
+        </label>
+      </div>
+
+      <label>Priorité
+        <select id="f-priority">
+          <option value="1">Normale</option>
+          <option value="2">Importante</option>
+          <option value="3">Urgente</option>
+        </select>
+      </label>
+
+      <label>Notes
+        <textarea id="f-notes" rows="3" maxlength="1000" placeholder="Détails, pages, consignes…"></textarea>
+      </label>
+
+      <div class="actions">
+        <button type="button" class="ghost" id="cancelBtn">Annuler</button>
+        <button type="submit" class="primary" id="saveBtn">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

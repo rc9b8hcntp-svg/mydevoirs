@@ -1,0 +1,65 @@
+{
+  "name": "mes-devoirs",
+  "productName": "Mes Devoirs",
+  "version": "1.0.0",
+  "description": "Un logiciel simple pour noter ses devoirs",
+  "main": "main.js",
+  "author": "Maxence",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 --ia32 --arm64 --publish never"
+  },
+  "build": {
+    "appId": "fr.maxence.mesdevoirs",
+    "productName": "Mes Devoirs",
+    "copyright": "Maxence",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "msi",
+          "arch": [
+            "x64",
+            "ia32",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64",
+            "ia32",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "MesDevoirs-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "MesDevoirs-Portable-${version}-${arch}.${ext}"
+    },
+    "msi": {
+      "artifactName": "MesDevoirs-Installeur-${version}-${arch}.${ext}",
+      "oneClick": false,
+      "perMachine": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "upgradeCode": "C87D402E-1D0C-4883-85EF-0602A330988C"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}
