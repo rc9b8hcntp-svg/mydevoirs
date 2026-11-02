@@ -24,16 +24,6 @@ Un petit logiciel Windows pour noter ses devoirs.
 L'installeur MSI crée un raccourci sur le Bureau et dans le menu Démarrer.
 La version « Portable » se lance directement, sans installation.
 
-## Construire les .msi avec GitHub
-
-1. Crée un dépôt GitHub (ex. `mes-devoirs`) et dépose-y **tout le contenu** de ce dossier
-   (y compris le dossier caché `.github`).
-2. Va dans l'onglet **Actions** → « Construire Mes Devoirs (Windows) » → **Run workflow**.
-3. Après quelques minutes, les fichiers sont dans la section **Artifacts** (`MesDevoirs-x64`,
-   `MesDevoirs-x86-32bits`, `MesDevoirs-ARM64`) **et** publiés dans l'onglet **Releases** du dépôt
-   (tag `v` + version de `package.json`, ex. `v1.0.0`). Pour une nouvelle version : change `version`
-   dans `package.json`, puis pousse sur `main` (ou crée un tag `vX.Y.Z`).
-
 ## Construire sur ton PC (alternative)
 
 Avec [Node.js](https://nodejs.org) installé :
