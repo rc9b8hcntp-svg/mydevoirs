@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main, master]
-    tags: ['v*']
 
 permissions:
   contents: write
@@ -23,47 +22,59 @@ jobs:
         with:
           node-version: 22
 
+      # Chaque publication reçoit un nouveau numéro : 1.0.<numéro du run>
+      # Le même numéro sert pour le .msi, le nom des fichiers et le tag de la release.
+      - name: Calculer la version et le tag
+        id: version
+        shell: bash
+        run: |
+          BASE=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          VERSION="$BASE.${{ github.run_number }}"
+          npm pkg set version="$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version : $VERSION (tag v$VERSION)"
+
       - name: Installer les dépendances
         run: npm install --no-audit --no-fund
 
-      - name: Construire x64, x86 (32 bits) et ARM64
+      - name: Construire les .msi (x64, x86 32 bits, ARM64)
         run: npx electron-builder --win --x64 --ia32 --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Envoyer les fichiers (x64)
+      - name: Envoyer le .msi (x64)
         uses: actions/upload-artifact@v4
         with:
           name: MesDevoirs-x64
-          path: dist/*-x64.exe
+          path: dist/*-x64.msi
 
-      - name: Envoyer les fichiers (x86 / 32 bits)
+      - name: Envoyer le .msi (x86 / 32 bits)
         uses: actions/upload-artifact@v4
         with:
           name: MesDevoirs-x86-32bits
-          path: dist/*-ia32.exe
+          path: dist/*-ia32.msi
 
-      - name: Envoyer les fichiers (ARM64)
+      - name: Envoyer le .msi (ARM64)
         uses: actions/upload-artifact@v4
         with:
           name: MesDevoirs-ARM64
-          path: dist/*-arm64.exe
+          path: dist/*-arm64.msi
 
-      - name: Lire la version
-        id: version
-        shell: bash
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Publier la release
+      - name: Publier la release (nouveau tag)
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
-          TAG="v$VERSION"
-          gh release delete "$TAG" --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
-          gh release create "$TAG" dist/*.exe \
-            --title "Mes Devoirs $VERSION" \
-            --target "$GITHUB_SHA" \
-            --latest \
-            --repo "$GITHUB_REPOSITORY"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # Cas d'un « Re-run » : le tag existe déjà, on remplace juste les fichiers
+            gh release upload "$TAG" dist/*.msi --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/*.msi \
+              --title "Mes Devoirs $VERSION" \
+              --target "$GITHUB_SHA" \
+              --latest \
+              --repo "$GITHUB_REPOSITORY"
+          fi
