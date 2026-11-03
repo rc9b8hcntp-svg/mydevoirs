@@ -12,6 +12,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
@@ -53,9 +55,15 @@ jobs:
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publier la release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.version.outputs.version) }}
-          name: Mes Devoirs ${{ steps.version.outputs.version }}
-          files: dist/*.exe
-          make_latest: 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          gh release delete "$TAG" --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create "$TAG" dist/*.exe \
+            --title "Mes Devoirs $VERSION" \
+            --target "$GITHUB_SHA" \
+            --latest \
+            --repo "$GITHUB_REPOSITORY"
