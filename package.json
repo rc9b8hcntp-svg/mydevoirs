@@ -8,7 +8,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --x64 --ia32 --arm64 --publish never"
+    "dist": "electron-builder --win --x64 --ia32 --arm64"
   },
   "build": {
     "appId": "fr.maxence.mesdevoirs",
@@ -20,6 +20,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "src/**/*",
       "build/icon.png"
     ],
@@ -27,20 +28,12 @@
       "icon": "build/icon.png",
       "target": [
         {
-          "target": "msi",
-          "arch": [
-            "x64",
-            "ia32",
-            "arm64"
-          ]
+          "target": "nsis",
+          "arch": ["x64", "ia32", "arm64"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64",
-            "ia32",
-            "arm64"
-          ]
+          "arch": ["x64", "ia32", "arm64"]
         }
       ],
       "artifactName": "MesDevoirs-${version}-${arch}.${ext}"
@@ -48,14 +41,13 @@
     "portable": {
       "artifactName": "MesDevoirs-Portable-${version}-${arch}.${ext}"
     },
-    "msi": {
+    "nsis": {
       "artifactName": "MesDevoirs-Installeur-${version}-${arch}.${ext}",
       "oneClick": false,
-      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "runAfterFinish": true,
-      "upgradeCode": "C87D402E-1D0C-4883-85EF-0602A330988C"
+      "language": "1036"
     }
   },
   "devDependencies": {
