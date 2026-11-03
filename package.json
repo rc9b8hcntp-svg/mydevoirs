@@ -20,6 +20,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "src/**/*",
       "build/icon.png"
     ],

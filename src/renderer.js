@@ -1,16 +1,94 @@
 'use strict';
 
-const PALETTE = ['#4f6bed', '#e5484d', '#22a06b', '#f59e0b', '#a855f7', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
+// ---------- Constantes ----------
 const PRIORITY_LABELS = { 1: 'Normale', 2: 'Importante', 3: 'Urgente' };
+const FILTER_LABELS = { todo: 'À faire', late: 'En retard', week: 'Cette semaine', done: 'Terminés', all: 'Tous les devoirs' };
+const NEUTRAL = '#8b93a7';
+const DEFAULT_UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
+
+// Anciennes couleurs automatiques (utilisées pour garder les couleurs des matières déjà créées)
+const LEGACY_PALETTE = ['#4f6bed', '#e5484d', '#22a06b', '#f59e0b', '#a855f7', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
+
+// Couleurs proposées pour les matières
+const SUBJECT_COLORS = [
+  { name: 'Indigo', value: '#4f6bed' },
+  { name: 'Bleu ciel', value: '#0ea5e9' },
+  { name: 'Turquoise', value: '#14b8a6' },
+  { name: 'Vert', value: '#22a06b' },
+  { name: 'Citron vert', value: '#84cc16' },
+  { name: 'Jaune', value: '#f59e0b' },
+  { name: 'Orange', value: '#f97316' },
+  { name: 'Rouge', value: '#e5484d' },
+  { name: 'Rose', value: '#ec4899' },
+  { name: 'Violet', value: '#a855f7' },
+  { name: 'Ardoise', value: '#64748b' },
+  { name: 'Marron', value: '#a16207' },
+];
+
+// Matières prédéfinies
+const DEFAULT_SUBJECTS = [
+  { name: 'Maths', color: '#4f6bed' },
+  { name: 'Français', color: '#e5484d' },
+  { name: 'Histoire-Géo', color: '#f59e0b' },
+  { name: 'Anglais', color: '#a855f7' },
+  { name: 'Espagnol', color: '#f97316' },
+  { name: 'SVT', color: '#22a06b' },
+  { name: 'Physique-Chimie', color: '#0ea5e9' },
+  { name: 'Technologie', color: '#14b8a6' },
+  { name: 'EPS', color: '#84cc16' },
+  { name: 'Arts plastiques', color: '#ec4899' },
+  { name: 'Musique', color: '#64748b' },
+];
+
+// Couleurs principales de l'application
+const ACCENTS = [
+  { id: 'indigo', name: 'Indigo', light: '#4f6bed', dark: '#7b8cff' },
+  { id: 'violet', name: 'Violet', light: '#8b5cf6', dark: '#a78bfa' },
+  { id: 'rose', name: 'Rose', light: '#ec4899', dark: '#f472b6' },
+  { id: 'rouge', name: 'Rouge', light: '#e5484d', dark: '#f2777b' },
+  { id: 'orange', name: 'Orange', light: '#ea6a0a', dark: '#fb923c' },
+  { id: 'vert', name: 'Vert', light: '#22a06b', dark: '#3ccf91' },
+  { id: 'turquoise', name: 'Turquoise', light: '#0d9488', dark: '#2dd4bf' },
+  { id: 'bleu', name: 'Bleu', light: '#0284c7', dark: '#38bdf8' },
+];
+
+const ICONS = {
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  circle: '<circle cx="12" cy="12" r="9"/>',
+  alert: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+  monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  palette: '<circle cx="13.5" cy="6.5" r=".6"/><circle cx="17.5" cy="10.5" r=".6"/><circle cx="8.5" cy="7.5" r=".6"/><circle cx="6.5" cy="12.5" r=".6"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.5-.7-.5-1.1 0-.8.7-1.5 1.5-1.5H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8-10-8z"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
+  sliders: '<path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  rotate: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+};
 
 const state = {
   homework: [],
-  settings: { theme: 'light' },
+  settings: {},
   filter: 'todo',
   subject: null, // null = toutes les matières
   search: '',
   sort: 'date',
   editingId: null,
+  view: 'list',
+  calMode: 'month', // 'month' ou 'week'
+  calAnchor: new Date(), // un jour de la période affichée
 };
 
 const $ = (id) => document.getElementById(id);
@@ -54,13 +132,6 @@ function dueLabel(str) {
   return { text: formatDate(str), cls: '' };
 }
 
-function subjectColor(name) {
-  if (!name) return '#8b93a7';
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.toLowerCase().charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length];
-}
-
 function isLate(h) {
   return !h.done && h.date && daysUntil(h.date) < 0;
 }
@@ -69,6 +140,36 @@ function isThisWeek(h) {
   if (h.done || !h.date) return false;
   const n = daysUntil(h.date);
   return n >= 0 && n <= 7;
+}
+
+function el(tag, className, text) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function button(className, label) {
+  const b = el('button', className, label);
+  b.type = 'button';
+  return b;
+}
+
+// ---------- Icônes ----------
+function svg(name) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+}
+function setIcon(span, name) {
+  span.dataset.icon = name;
+  span.innerHTML = svg(name);
+}
+function mkIcon(name) {
+  const s = el('span', 'ico');
+  setIcon(s, name);
+  return s;
+}
+function hydrateIcons() {
+  document.querySelectorAll('.ico[data-icon]').forEach((s) => setIcon(s, s.dataset.icon));
 }
 
 // ---------- Sauvegarde ----------
@@ -80,11 +181,94 @@ function persist() {
   }, 150);
 }
 
+// ---------- Matières ----------
+function sameName(a, b) {
+  return (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+}
+
+function findSubject(name) {
+  if (!name) return null;
+  return state.settings.subjects.find((s) => sameName(s.name, name)) || null;
+}
+
+function subjectColor(name) {
+  const s = findSubject(name);
+  return s ? s.color : NEUTRAL;
+}
+
+function nextFreeColor() {
+  const used = new Set(state.settings.subjects.map((s) => s.color));
+  const free = SUBJECT_COLORS.find((c) => !used.has(c.value));
+  return (free || SUBJECT_COLORS[state.settings.subjects.length % SUBJECT_COLORS.length]).value;
+}
+
+function countUsing(name) {
+  return state.homework.filter((h) => sameName(h.subject, name)).length;
+}
+
+function addSubject(rawName, color) {
+  const name = rawName.trim().replace(/\s+/g, ' ');
+  if (!name) return { ok: false, msg: 'Écris un nom de matière.' };
+  if (findSubject(name)) return { ok: false, msg: 'Cette matière existe déjà.' };
+  state.settings.subjects.push({ id: uid(), name, color });
+  persist();
+  return { ok: true, name };
+}
+
+function removeSubject(subject) {
+  const n = countUsing(subject.name);
+  if (n > 0) {
+    const ok = confirm(
+      `« ${subject.name} » est utilisée par ${n} devoir${n > 1 ? 's' : ''}.\n` +
+      `${n > 1 ? 'Ils garderont' : 'Il gardera'} le nom de la matière, mais sans couleur.\n\nRetirer cette matière ?`
+    );
+    if (!ok) return false;
+  }
+  state.settings.subjects = state.settings.subjects.filter((s) => s.id !== subject.id);
+  if (state.subject !== null && sameName(state.subject, subject.name)) state.subject = null;
+  if (sameName(pickedSubject, subject.name)) pickedSubject = '';
+  persist();
+  return true;
+}
+
+function setSubjectColor(subject, color) {
+  subject.color = color;
+  persist();
+}
+
+function buildInitialSubjects(homework) {
+  const list = DEFAULT_SUBJECTS.map((s) => ({ id: uid(), name: s.name, color: s.color }));
+  // Garde les matières déjà utilisées dans des devoirs existants, avec leur ancienne couleur
+  const seen = new Set(list.map((s) => s.name.toLowerCase()));
+  homework.forEach((h) => {
+    const name = (h.subject || '').trim();
+    if (!name || seen.has(name.toLowerCase())) return;
+    seen.add(name.toLowerCase());
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.toLowerCase().charCodeAt(i)) >>> 0;
+    list.push({ id: uid(), name, color: LEGACY_PALETTE[hash % LEGACY_PALETTE.length] });
+  });
+  return list;
+}
+
+// Palette de couleurs réutilisable
+function renderPalette(container, selected, onPick) {
+  container.textContent = '';
+  SUBJECT_COLORS.forEach((c) => {
+    const b = button('swatch' + (c.value === selected ? ' on' : ''));
+    b.style.setProperty('--c', c.value);
+    b.title = c.name;
+    b.setAttribute('aria-label', c.name);
+    b.addEventListener('click', () => onPick(c.value));
+    container.append(b);
+  });
+}
+
 // ---------- Filtrage ----------
 function visibleItems() {
   const q = state.search.trim().toLowerCase();
-  let items = state.homework.filter((h) => {
-    if (state.subject !== null && (h.subject || '') !== state.subject) return false;
+  const items = state.homework.filter((h) => {
+    if (state.subject !== null && !sameName(h.subject, state.subject)) return false;
     if (q && !(`${h.title} ${h.subject || ''} ${h.notes || ''}`.toLowerCase().includes(q))) return false;
     switch (state.filter) {
       case 'todo': return !h.done;
@@ -115,13 +299,6 @@ function visibleItems() {
 }
 
 // ---------- Rendu ----------
-function el(tag, className, text) {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
 function renderCounts() {
   const hw = state.homework;
   $('c-todo').textContent = hw.filter((h) => !h.done).length;
@@ -134,43 +311,46 @@ function renderCounts() {
   const late = hw.filter(isLate).length;
   const stats = $('stats');
   stats.textContent = '';
-  const s1 = el('strong', null, String(todo));
-  stats.append(s1, ` devoir${todo > 1 ? 's' : ''} à faire`);
+  stats.append(el('strong', null, String(todo)), ` devoir${todo > 1 ? 's' : ''} à faire`);
   if (late > 0) {
     stats.append(' · ');
     const s2 = el('strong', null, String(late));
     s2.style.color = 'var(--danger)';
-    stats.append(s2, ` en retard`);
+    stats.append(s2, ' en retard');
   }
+
+  let title = FILTER_LABELS[state.filter];
+  if (state.subject !== null) title += ' · ' + state.subject;
+  $('pageTitle').textContent = title;
 }
 
 function renderSubjects() {
   const box = $('subjectList');
   box.textContent = '';
-  const names = [...new Set(state.homework.map((h) => h.subject || '').filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const subjects = [...state.settings.subjects].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 
-  if (names.length === 0) {
-    box.append(el('div', 'muted', 'Aucune matière pour le moment'));
-  } else {
-    const all = el('button', state.subject === null ? 'active' : '');
-    all.append(el('span', 'dot'), 'Toutes');
-    all.firstChild.style.background = 'var(--muted)';
-    all.addEventListener('click', () => { state.subject = null; render(); });
-    box.append(all);
-
-    names.forEach((name) => {
-      const b = el('button', state.subject === name ? 'active' : '');
-      const dot = el('span', 'dot');
-      dot.style.background = subjectColor(name);
-      b.append(dot, name);
-      b.addEventListener('click', () => { state.subject = state.subject === name ? null : name; render(); });
-      box.append(b);
-    });
+  if (subjects.length === 0) {
+    box.append(el('div', 'muted', 'Aucune matière. Ajoutes-en avec le crayon.'));
+    return;
   }
 
-  const dl = $('subjectsData');
-  dl.textContent = '';
-  names.forEach((n) => { const o = document.createElement('option'); o.value = n; dl.append(o); });
+  const all = button(state.subject === null ? 'active' : '');
+  all.append(el('span', 'dot'), el('span', 'name', 'Toutes'));
+  all.addEventListener('click', () => { state.subject = null; render(); });
+  box.append(all);
+
+  subjects.forEach((s) => {
+    const b = button(state.subject !== null && sameName(state.subject, s.name) ? 'active' : '');
+    b.style.setProperty('--c', s.color);
+    const todo = state.homework.filter((h) => !h.done && sameName(h.subject, s.name)).length;
+    b.append(el('span', 'dot'), el('span', 'name', s.name));
+    if (todo > 0) b.append(el('span', 'n', String(todo)));
+    b.addEventListener('click', () => {
+      state.subject = state.subject !== null && sameName(state.subject, s.name) ? null : s.name;
+      render();
+    });
+    box.append(b);
+  });
 }
 
 function renderList() {
@@ -182,7 +362,7 @@ function renderList() {
   if (items.length === 0) {
     const msgs = {
       todo: ['🎉', 'Aucun devoir à faire. Profites-en !'],
-      late: ['👍', "Aucun devoir en retard."],
+      late: ['👍', 'Aucun devoir en retard.'],
       week: ['😎', 'Rien de prévu cette semaine.'],
       done: ['📭', "Aucun devoir terminé pour l'instant."],
       all: ['📝', 'Ajoute ton premier devoir avec « Nouveau devoir ».'],
@@ -194,11 +374,13 @@ function renderList() {
   }
 
   items.forEach((h) => {
+    const color = subjectColor(h.subject);
     const li = el('li', 'item' + (h.done ? ' done' : ''));
-    li.style.setProperty('--c', subjectColor(h.subject));
+    li.style.setProperty('--c', color);
 
     const cb = document.createElement('input');
     cb.type = 'checkbox';
+    cb.className = 'check';
     cb.checked = !!h.done;
     cb.setAttribute('aria-label', 'Marquer comme terminé');
     cb.addEventListener('change', () => {
@@ -214,27 +396,32 @@ function renderList() {
 
     const meta = el('div', 'meta');
     if (h.subject) {
-      const t = el('span', 'tag subject', h.subject);
-      t.style.setProperty('--c', subjectColor(h.subject));
+      const t = el('span', 'tag subject');
+      t.style.setProperty('--c', color);
+      t.append(el('span', 'dot'), h.subject);
       meta.append(t);
     }
     if (h.date) {
       const due = h.done ? { text: formatDate(h.date), cls: '' } : dueLabel(h.date);
-      meta.append(el('span', 'tag ' + due.cls, '📅 ' + due.text));
+      const tag = el('span', 'tag ' + due.cls);
+      tag.append(mkIcon('calendar'), due.text);
+      meta.append(tag);
     }
     if (h.priority > 1) meta.append(el('span', 'tag p' + h.priority, PRIORITY_LABELS[h.priority]));
     body.append(meta);
 
     const btns = el('div', 'btns');
-    const edit = el('button', null, '✏️');
+    const edit = button(null);
+    edit.append(mkIcon('edit'));
     edit.title = 'Modifier';
     edit.setAttribute('aria-label', 'Modifier');
     edit.addEventListener('click', () => openDialog(h.id));
-    const del = el('button', null, '🗑️');
+    const del = button('del');
+    del.append(mkIcon('trash'));
     del.title = 'Supprimer';
     del.setAttribute('aria-label', 'Supprimer');
     del.addEventListener('click', () => {
-      if (confirm(`Supprimer « ${h.title} » ?`)) {
+      if (!state.settings.confirmDelete || confirm(`Supprimer « ${h.title} » ?`)) {
         state.homework = state.homework.filter((x) => x.id !== h.id);
         persist();
         render();
@@ -247,31 +434,276 @@ function renderList() {
   });
 }
 
+// ---------- Calendrier ----------
+function ymd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function mondayOf(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+}
+
+function calTitleText() {
+  const a = state.calAnchor;
+  if (state.calMode === 'month') {
+    const t = new Date(a.getFullYear(), a.getMonth(), 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  const s = mondayOf(a);
+  const e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 4); // vendredi
+  const mon = (d, style) => d.toLocaleDateString('fr-FR', { month: style });
+  if (s.getFullYear() !== e.getFullYear()) return `${s.getDate()} ${mon(s, 'short')} ${s.getFullYear()} – ${e.getDate()} ${mon(e, 'short')} ${e.getFullYear()}`;
+  if (s.getMonth() !== e.getMonth()) return `${s.getDate()} ${mon(s, 'short')} – ${e.getDate()} ${mon(e, 'short')} ${e.getFullYear()}`;
+  return `${s.getDate()} – ${e.getDate()} ${mon(e, 'long')} ${e.getFullYear()}`;
+}
+
+function renderCalendar() {
+  const week = state.calMode === 'week';
+  $('calTitle').textContent = calTitleText();
+  $('calPrev').title = $('calPrev').ariaLabel = week ? 'Semaine précédente' : 'Mois précédent';
+  $('calNext').title = $('calNext').ariaLabel = week ? 'Semaine suivante' : 'Mois suivant';
+  document.querySelectorAll('#calModeSeg button').forEach((b) => {
+    const on = b.dataset.mode === state.calMode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+
+  const items = visibleItems();
+  const byDay = new Map();
+  let undated = 0;
+  items.forEach((h) => {
+    if (!h.date) { undated++; return; }
+    if (!byDay.has(h.date)) byDay.set(h.date, []);
+    byDay.get(h.date).push(h);
+  });
+  const notes = [];
+  if (week) {
+    // Les devoirs du samedi et du dimanche ne sont pas dans la grille : on le signale
+    const mon = mondayOf(state.calAnchor);
+    let weekend = 0;
+    [5, 6].forEach((d) => { weekend += (byDay.get(ymd(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + d))) || []).length; });
+    if (weekend > 0) notes.push(`${weekend} devoir${weekend > 1 ? 's' : ''} le week-end (non affiché${weekend > 1 ? 's' : ''})`);
+  }
+  if (undated > 0) notes.push(`${undated} devoir${undated > 1 ? 's' : ''} sans date (visible${undated > 1 ? 's' : ''} dans la liste)`);
+  $('calNote').textContent = notes.join(' · ');
+
+  // Semaines commençant le lundi
+  let start;
+  let weeks;
+  const month = state.calAnchor.getMonth();
+  if (week) {
+    start = mondayOf(state.calAnchor);
+    weeks = 1;
+  } else {
+    const y = state.calAnchor.getFullYear();
+    const first = new Date(y, month, 1);
+    const offset = (first.getDay() + 6) % 7;
+    start = new Date(y, month, 1 - offset);
+    weeks = Math.ceil((offset + new Date(y, month + 1, 0).getDate()) / 7);
+  }
+
+  const grid = $('calGrid');
+  grid.textContent = '';
+  grid.classList.toggle('week', week);
+  grid.style.gridTemplateRows = `auto repeat(${weeks}, minmax(0, 1fr))`;
+  const days = week ? 5 : 7; // semaine = lundi à vendredi
+  grid.style.gridTemplateColumns = `repeat(${days}, minmax(0, 1fr))`;
+  const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+  const today = todayStr();
+
+  if (week) {
+    for (let i = 0; i < days; i++) {
+      const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const head = el('div', 'cal-dow wk' + (ymd(date) === today ? ' today' : ''));
+      head.append(el('span', null, DOW[i]), el('span', 'cal-num', String(date.getDate())));
+      grid.append(head);
+    }
+  } else {
+    DOW.forEach((d) => grid.append(el('div', 'cal-dow', d)));
+  }
+
+  for (let i = 0; i < weeks * days; i++) {
+    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const key = ymd(date);
+    const cell = el('div', 'cal-day' + (!week && date.getMonth() !== month ? ' other' : '') + (key === today ? ' today' : ''));
+    cell.title = 'Ajouter un devoir ce jour-là';
+    if (!week) cell.append(el('div', 'cal-num', String(date.getDate())));
+
+    const box = el('div', 'cal-items');
+    (byDay.get(key) || []).forEach((h) => {
+      const cls = 'cal-chip' + (h.done ? ' done' : '') + (isLate(h) ? ' late' : '');
+      const chip = button(cls);
+      if (week) {
+        if (h.subject) chip.append(el('span', 'cs', h.subject));
+        chip.append(el('span', 'ct', h.title));
+        if (h.priority > 1) chip.append(el('span', 'cp p' + h.priority, PRIORITY_LABELS[h.priority]));
+      } else {
+        chip.textContent = (h.subject ? h.subject + ' · ' : '') + h.title;
+      }
+      chip.style.setProperty('--c', subjectColor(h.subject));
+      chip.title = h.title + (h.notes ? '\n' + h.notes : '');
+      chip.addEventListener('click', (e) => { e.stopPropagation(); openDialog(h.id); });
+      box.append(chip);
+    });
+    cell.append(box);
+    cell.addEventListener('click', () => openDialog(null, key));
+    grid.append(cell);
+  }
+}
+
+function renderView() {
+  const cal = state.view === 'calendar';
+  $('calendar').hidden = !cal;
+  $('list').hidden = cal;
+  $('sort').hidden = cal;
+  document.querySelectorAll('#viewSeg button').forEach((b) => {
+    const on = b.dataset.view === state.view;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  if (cal) { $('empty').hidden = true; renderCalendar(); } else { renderList(); }
+}
+
 function render() {
   document.querySelectorAll('#filters button').forEach((b) => {
     b.classList.toggle('active', b.dataset.filter === state.filter);
   });
   renderCounts();
   renderSubjects();
-  renderList();
+  renderView();
 }
 
 // ---------- Thème ----------
-function applyTheme() {
-  document.documentElement.dataset.theme = state.settings.theme === 'dark' ? 'dark' : 'light';
-  $('themeBtn').textContent = state.settings.theme === 'dark' ? '☀️' : '🌙';
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+function resolvedTheme() {
+  const t = state.settings.theme;
+  if (t === 'auto') return darkQuery.matches ? 'dark' : 'light';
+  return t === 'dark' ? 'dark' : 'light';
 }
 
-// ---------- Boîte de dialogue ----------
-function openDialog(id) {
+function textOn(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return L > 0.4 ? '#10131c' : '#ffffff';
+}
+
+function applyTheme() {
+  const theme = resolvedTheme();
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  const accent = ACCENTS.find((a) => a.id === state.settings.accent) || ACCENTS[0];
+  const color = theme === 'dark' ? accent.dark : accent.light;
+  root.style.setProperty('--accent', color);
+  root.style.setProperty('--accent-text', textOn(color));
+  setIcon($('themeBtn').firstElementChild, theme === 'dark' ? 'sun' : 'moon');
+
+  document.querySelectorAll('#themeSeg button').forEach((b) => {
+    const on = b.dataset.theme === state.settings.theme;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  renderAccents();
+}
+
+darkQuery.addEventListener('change', () => { if (state.settings.theme === 'auto') applyTheme(); });
+
+function renderAccents() {
+  const box = $('accentList');
+  box.textContent = '';
+  const theme = resolvedTheme();
+  ACCENTS.forEach((a) => {
+    const b = button('swatch' + (a.id === state.settings.accent ? ' on' : ''));
+    b.style.setProperty('--c', theme === 'dark' ? a.dark : a.light);
+    b.title = a.name;
+    b.setAttribute('aria-label', a.name);
+    b.addEventListener('click', () => {
+      state.settings.accent = a.id;
+      persist();
+      applyTheme();
+    });
+    box.append(b);
+  });
+}
+
+// ---------- Ajouter / modifier un devoir ----------
+let pickedSubject = '';
+let pickedPriority = '1';
+let quickColor = SUBJECT_COLORS[0].value;
+
+function renderPicker() {
+  const box = $('f-subjects');
+  box.textContent = '';
+  const list = [...state.settings.subjects];
+  if (pickedSubject && !findSubject(pickedSubject)) list.push({ id: 'orphan', name: pickedSubject, color: NEUTRAL });
+
+  list.forEach((s) => {
+    const on = sameName(s.name, pickedSubject);
+    const b = button('chip' + (on ? ' on' : ''));
+    b.style.setProperty('--c', s.color);
+    b.setAttribute('aria-pressed', String(on));
+    b.append(el('span', 'dot'), s.name);
+    if (on) b.append(mkIcon('check'));
+    b.addEventListener('click', () => {
+      pickedSubject = on ? '' : s.name;
+      renderPicker();
+    });
+    box.append(b);
+  });
+
+  const add = button('chip add');
+  add.append(mkIcon('plus'), 'Nouvelle matière');
+  add.addEventListener('click', openQuickAdd);
+  box.append(add);
+}
+
+function renderQuickPalette() {
+  renderPalette($('qa-palette'), quickColor, (c) => { quickColor = c; renderQuickPalette(); });
+}
+
+function openQuickAdd() {
+  quickColor = nextFreeColor();
+  $('qa-name').value = '';
+  $('qa-err').textContent = '';
+  renderQuickPalette();
+  $('quickAdd').hidden = false;
+  $('qa-name').focus();
+}
+
+function closeQuickAdd() {
+  $('quickAdd').hidden = true;
+}
+
+function submitQuickAdd() {
+  const r = addSubject($('qa-name').value, quickColor);
+  if (!r.ok) { $('qa-err').textContent = r.msg; return; }
+  pickedSubject = r.name;
+  closeQuickAdd();
+  renderPicker();
+  render();
+}
+
+function setPriority(value) {
+  pickedPriority = String(value);
+  document.querySelectorAll('#f-priority button').forEach((b) => {
+    const on = b.dataset.value === pickedPriority;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+}
+
+function openDialog(id, presetDate) {
   state.editingId = id || null;
   const h = id ? state.homework.find((x) => x.id === id) : null;
   $('dialogTitle').textContent = h ? 'Modifier le devoir' : 'Nouveau devoir';
   $('f-title').value = h ? h.title : '';
-  $('f-subject').value = h ? h.subject || '' : (state.subject || '');
-  $('f-date').value = h ? h.date || '' : '';
-  $('f-priority').value = h ? String(h.priority || 1) : '1';
+  $('f-date').value = h ? h.date || '' : (presetDate || '');
   $('f-notes').value = h ? h.notes || '' : '';
+  setPriority(h ? (h.priority || 1) : (state.settings.defaultPriority || 1));
+  pickedSubject = h ? h.subject || '' : (state.subject || '');
+  closeQuickAdd();
+  renderPicker();
   $('dialog').showModal();
   $('f-title').focus();
 }
@@ -282,9 +714,9 @@ $('form').addEventListener('submit', (e) => {
   if (!title) return;
   const data = {
     title,
-    subject: $('f-subject').value.trim(),
+    subject: pickedSubject,
     date: $('f-date').value,
-    priority: Number($('f-priority').value) || 1,
+    priority: Number(pickedPriority) || 1,
     notes: $('f-notes').value.trim(),
   };
   if (state.editingId) {
@@ -299,9 +731,241 @@ $('form').addEventListener('submit', (e) => {
 });
 
 $('cancelBtn').addEventListener('click', () => $('dialog').close());
+$('dlgClose').addEventListener('click', () => $('dialog').close());
+$('f-priority').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-value]');
+  if (b) setPriority(b.dataset.value);
+});
+$('qa-ok').addEventListener('click', submitQuickAdd);
+$('qa-cancel').addEventListener('click', closeQuickAdd);
+$('qa-name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitQuickAdd(); }
+  if (e.key === 'Escape' && !$('quickAdd').hidden) { e.preventDefault(); e.stopPropagation(); closeQuickAdd(); }
+});
+$('manageFromDialog').addEventListener('click', () => openSettings('subjects'));
+
+// ---------- Paramètres ----------
+let colorEditing = null; // id de la matière dont on change la couleur
+let newSubjectColor = SUBJECT_COLORS[0].value;
+
+function showTab(tab) {
+  document.querySelectorAll('#setNav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.set-body section').forEach((s) => { s.hidden = s.dataset.panel !== tab; });
+}
+
+function openSettings(tab) {
+  showTab(tab || 'appearance');
+  colorEditing = null;
+  newSubjectColor = nextFreeColor();
+  $('s-new-name').value = '';
+  $('s-new-err').textContent = '';
+  renderSubjectManager();
+  renderNewSubjectPalette();
+  $('s-start').value = state.settings.startFilter;
+  $('s-prio').value = String(state.settings.defaultPriority);
+  $('s-confirm').checked = !!state.settings.confirmDelete;
+  $('u-repo').value = state.settings.updateRepo || DEFAULT_UPDATE_REPO;
+  window.devoirsAPI.getVersion().then((v) => { $('u-version').textContent = `Mes Devoirs ${v}`; }).catch(() => {});
+  if (!$('settings').open) $('settings').showModal();
+}
+
+function renderSubjectManager() {
+  const box = $('s-subjects');
+  box.textContent = '';
+  const subjects = state.settings.subjects;
+
+  if (subjects.length === 0) {
+    box.append(el('div', 'empty-rows', 'Aucune matière. Ajoutes-en une ci-dessous.'));
+    return;
+  }
+
+  subjects.forEach((s) => {
+    const row = el('div', 'srow');
+    const sw = button('swatch big');
+    sw.style.setProperty('--c', s.color);
+    sw.title = 'Changer la couleur';
+    sw.setAttribute('aria-label', `Changer la couleur de ${s.name}`);
+    sw.addEventListener('click', () => {
+      colorEditing = colorEditing === s.id ? null : s.id;
+      renderSubjectManager();
+    });
+
+    const n = countUsing(s.name);
+    const del = button('del');
+    del.append(mkIcon('trash'));
+    del.title = 'Retirer cette matière';
+    del.setAttribute('aria-label', `Retirer ${s.name}`);
+    del.addEventListener('click', () => {
+      if (removeSubject(s)) { colorEditing = null; renderSubjectManager(); render(); }
+    });
+
+    row.append(sw, el('span', 'sname', s.name), el('span', 'scount', n > 0 ? `${n} devoir${n > 1 ? 's' : ''}` : ''), del);
+    box.append(row);
+
+    if (colorEditing === s.id) {
+      const prow = el('div', 'prow');
+      const pal = el('div', 'palette');
+      renderPalette(pal, s.color, (c) => {
+        setSubjectColor(s, c);
+        colorEditing = null;
+        renderSubjectManager();
+        render();
+      });
+      prow.append(pal);
+      box.append(prow);
+    }
+  });
+}
+
+function renderNewSubjectPalette() {
+  renderPalette($('s-new-palette'), newSubjectColor, (c) => { newSubjectColor = c; renderNewSubjectPalette(); });
+}
+
+function submitNewSubject() {
+  const r = addSubject($('s-new-name').value, newSubjectColor);
+  if (!r.ok) { $('s-new-err').textContent = r.msg; return; }
+  $('s-new-name').value = '';
+  $('s-new-err').textContent = '';
+  newSubjectColor = nextFreeColor();
+  renderSubjectManager();
+  renderNewSubjectPalette();
+  render();
+  $('s-new-name').focus();
+}
+
+$('s-new-add').addEventListener('click', submitNewSubject);
+$('s-new-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitNewSubject(); } });
+$('s-new-name').addEventListener('input', () => { $('s-new-err').textContent = ''; });
+
+$('s-restore').addEventListener('click', () => {
+  const missing = DEFAULT_SUBJECTS.filter((d) => !findSubject(d.name));
+  if (missing.length === 0) { alert('Toutes les matières par défaut sont déjà dans la liste.'); return; }
+  missing.forEach((d) => state.settings.subjects.push({ id: uid(), name: d.name, color: d.color }));
+  persist();
+  renderSubjectManager();
+  render();
+});
+
+$('setNav').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tab]');
+  if (b) showTab(b.dataset.tab);
+});
+
+$('themeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-theme]');
+  if (!b) return;
+  state.settings.theme = b.dataset.theme;
+  persist();
+  applyTheme();
+});
+
+$('s-start').addEventListener('change', (e) => { state.settings.startFilter = e.target.value; persist(); });
+$('s-prio').addEventListener('change', (e) => { state.settings.defaultPriority = e.target.value; persist(); });
+$('s-confirm').addEventListener('change', (e) => { state.settings.confirmDelete = e.target.checked; persist(); });
+
+// ----- Mise à jour -----
+let updateUrl = null;
+
+function showUpdateStatus(kind, icon, title, sub, url) {
+  const box = $('u-status');
+  box.hidden = false;
+  box.className = 'u-status ' + kind;
+  setIcon($('u-icon'), icon);
+  $('u-title').textContent = title;
+  $('u-sub').textContent = sub || '';
+  updateUrl = url || null;
+  $('u-open').hidden = !url;
+}
+
+async function runUpdateCheck() {
+  const btn = $('u-check');
+  btn.disabled = true;
+  showUpdateStatus('', 'clock', 'Recherche en cours…', '');
+  const repo = $('u-repo').value.trim();
+  state.settings.updateRepo = repo;
+  persist();
+  let r;
+  try { r = await window.devoirsAPI.checkUpdate(repo); } catch (e) { r = { status: 'error' }; }
+  btn.disabled = false;
+
+  switch (r.status) {
+    case 'available':
+      showUpdateStatus('new', 'download', `La version ${r.latest} est disponible`, 'Télécharge-la puis installe-la par-dessus la version actuelle.', r.url);
+      $('u-open').textContent = `Télécharger la ${r.latest}`;
+      break;
+    case 'up-to-date':
+      showUpdateStatus('ok', 'check', 'Tu as la dernière version', `Version ${r.latest}`);
+      break;
+    case 'no-repo':
+      showUpdateStatus('bad', 'alert', 'Dépôt GitHub manquant', 'Écris le nom de ton dépôt (ex : pseudo/mes-devoirs) ci-dessous.');
+      $('u-repo').focus();
+      break;
+    case 'no-release':
+      showUpdateStatus('bad', 'alert', 'Aucune version trouvée', 'Vérifie le nom du dépôt, ou publie une version dans « Releases » sur GitHub.');
+      break;
+    case 'network':
+      showUpdateStatus('bad', 'alert', 'Impossible de vérifier', 'Vérifie ta connexion Internet puis réessaie.');
+      break;
+    default:
+      showUpdateStatus('bad', 'alert', 'La vérification a échoué', 'Réessaie dans quelques instants.');
+  }
+}
+
+$('u-check').addEventListener('click', runUpdateCheck);
+$('u-open').addEventListener('click', () => { if (updateUrl) window.devoirsAPI.openUpdatePage(updateUrl); });
+$('u-repo').addEventListener('keydown', (e) => { if (e.key === 'Enter') runUpdateCheck(); });
+$('u-repo').addEventListener('change', (e) => { state.settings.updateRepo = e.target.value.trim(); persist(); });
+
+$('setClose').addEventListener('click', () => $('settings').close());
+$('settings').addEventListener('close', () => {
+  render();
+  if ($('dialog').open) renderPicker();
+});
+
+$('settingsBtn').addEventListener('click', () => openSettings('appearance'));
+$('manageSubjects').addEventListener('click', () => openSettings('subjects'));
 
 // ---------- Événements ----------
 $('newBtn').addEventListener('click', () => openDialog(null));
+
+$('viewSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-view]');
+  if (!b) return;
+  state.view = b.dataset.view;
+  state.settings.view = state.view;
+  persist();
+  renderView();
+});
+
+function moveCal(delta) {
+  const a = state.calAnchor;
+  state.calAnchor = state.calMode === 'week'
+    ? new Date(a.getFullYear(), a.getMonth(), a.getDate() + 7 * delta)
+    : new Date(a.getFullYear(), a.getMonth() + delta, 1);
+  renderCalendar();
+}
+$('calPrev').addEventListener('click', () => moveCal(-1));
+$('calNext').addEventListener('click', () => moveCal(1));
+$('calToday').addEventListener('click', () => {
+  state.calAnchor = new Date();
+  renderCalendar();
+});
+
+$('calModeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b || b.dataset.mode === state.calMode) return;
+  // Si aujourd'hui est dans la période affichée, on s'y recentre
+  const t = new Date();
+  const a = state.calAnchor;
+  const todayShown = state.calMode === 'month'
+    ? a.getFullYear() === t.getFullYear() && a.getMonth() === t.getMonth()
+    : ymd(mondayOf(a)) === ymd(mondayOf(t));
+  if (todayShown) state.calAnchor = t;
+  state.calMode = b.dataset.mode;
+  state.settings.calMode = state.calMode;
+  persist();
+  renderCalendar();
+});
 
 $('filters').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-filter]');
@@ -310,19 +974,19 @@ $('filters').addEventListener('click', (e) => {
   render();
 });
 
-$('search').addEventListener('input', (e) => { state.search = e.target.value; renderList(); });
+$('search').addEventListener('input', (e) => { state.search = e.target.value; renderView(); });
 
 $('sort').addEventListener('change', (e) => {
   state.sort = e.target.value;
   state.settings.sort = state.sort;
   persist();
-  renderList();
+  renderView();
 });
 
 $('themeBtn').addEventListener('click', () => {
-  state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark';
-  applyTheme();
+  state.settings.theme = resolvedTheme() === 'dark' ? 'light' : 'dark';
   persist();
+  applyTheme();
 });
 
 $('clearDone').addEventListener('click', () => {
@@ -336,6 +1000,7 @@ $('clearDone').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (document.querySelector('dialog[open]')) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); openDialog(null); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('search').focus(); }
 });
@@ -350,10 +1015,27 @@ window.addEventListener('focus', checkDayChange);
 
 // ---------- Démarrage ----------
 (async function init() {
+  hydrateIcons();
   const data = await window.devoirsAPI.load();
   state.homework = data.homework;
-  state.settings = Object.assign({ theme: 'light', sort: 'date' }, data.settings);
+
+  const defaults = { theme: 'light', accent: 'indigo', sort: 'date', startFilter: 'todo', defaultPriority: '1', confirmDelete: true, updateRepo: DEFAULT_UPDATE_REPO, view: 'list', calMode: 'month' };
+  state.settings = Object.assign(defaults, data.settings);
+  state.settings.defaultPriority = String(state.settings.defaultPriority);
+
+  if (Array.isArray(state.settings.subjects)) {
+    state.settings.subjects = state.settings.subjects
+      .filter((s) => s && typeof s.name === 'string' && s.name.trim())
+      .map((s) => ({ id: s.id || uid(), name: s.name.trim(), color: typeof s.color === 'string' && /^#[0-9a-f]{6}$/i.test(s.color) ? s.color : NEUTRAL }));
+  } else {
+    state.settings.subjects = buildInitialSubjects(state.homework);
+    persist();
+  }
+
   state.sort = state.settings.sort || 'date';
+  state.filter = FILTER_LABELS[state.settings.startFilter] ? state.settings.startFilter : 'todo';
+  state.view = state.settings.view === 'calendar' ? 'calendar' : 'list';
+  state.calMode = state.settings.calMode === 'week' ? 'week' : 'month';
   $('sort').value = state.sort;
   applyTheme();
   render();
