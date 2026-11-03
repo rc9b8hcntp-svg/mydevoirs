@@ -1,7 +1,6 @@
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { checkForUpdate } = require('./updater');
 
 const dataFile = () => path.join(app.getPath('userData'), 'devoirs.json');
 
@@ -32,23 +31,12 @@ ipcMain.handle('data:save', (_e, data) => {
   return true;
 });
 
-ipcMain.handle('app:version', () => app.getVersion());
-ipcMain.handle('update:check', (_e, repo) => checkForUpdate(repo, app.getVersion()));
-ipcMain.handle('update:open', (_e, url) => {
-  // On n'ouvre que des pages GitHub
-  if (typeof url === 'string' && /^https:\/\/github\.com\//.test(url)) {
-    shell.openExternal(url);
-    return true;
-  }
-  return false;
-});
-
 function createWindow() {
   const win = new BrowserWindow({
     width: 980,
     height: 700,
-    minWidth: 640,
-    minHeight: 480,
+    minWidth: 420,
+    minHeight: 420,
     title: 'Mes Devoirs',
     backgroundColor: '#f5f6fa',
     icon: path.join(__dirname, 'build', 'icon.png'),

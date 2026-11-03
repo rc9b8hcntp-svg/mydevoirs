@@ -25,12 +25,7 @@
     ],
     "win": {
       "icon": "build/icon.png",
-      "target": [
-        {
-          "target": "msi",
-          "arch": ["x64", "ia32", "arm64"]
-        }
-      ]
+      "target": "msi"
     },
     "msi": {
       "artifactName": "MesDevoirs-${version}-${arch}.${ext}",

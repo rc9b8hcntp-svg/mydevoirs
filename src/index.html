@@ -9,136 +9,81 @@
 </head>
 <body>
   <div class="app">
-    <aside class="sidebar">
+    <header class="topbar">
       <div class="brand">
-        <span class="logo"><span class="ico" data-icon="book"></span></span>
+        <span class="logo">📚</span>
         <h1>Mes Devoirs</h1>
       </div>
+      <div class="stats" id="stats"></div>
+      <button class="icon-btn" id="themeBtn" title="Changer de thème" aria-label="Changer de thème">🌙</button>
+    </header>
 
-      <button class="primary big" id="newBtn"><span class="ico" data-icon="plus"></span>Nouveau devoir</button>
+    <main class="layout">
+      <aside class="sidebar">
+        <button class="primary" id="newBtn">＋ Nouveau devoir</button>
 
-      <nav class="filters" id="filters">
-        <button data-filter="todo" class="active"><span class="ico" data-icon="circle"></span><span class="lbl">À faire</span><span class="count" id="c-todo">0</span></button>
-        <button data-filter="late"><span class="ico" data-icon="alert"></span><span class="lbl">En retard</span><span class="count" id="c-late">0</span></button>
-        <button data-filter="week"><span class="ico" data-icon="calendar"></span><span class="lbl">Cette semaine</span><span class="count" id="c-week">0</span></button>
-        <button data-filter="done"><span class="ico" data-icon="check"></span><span class="lbl">Terminés</span><span class="count" id="c-done">0</span></button>
-        <button data-filter="all"><span class="ico" data-icon="layers"></span><span class="lbl">Tous</span><span class="count" id="c-all">0</span></button>
-      </nav>
+        <nav class="filters" id="filters">
+          <button data-filter="todo" class="active">À faire <span class="count" id="c-todo">0</span></button>
+          <button data-filter="late">En retard <span class="count" id="c-late">0</span></button>
+          <button data-filter="week">Cette semaine <span class="count" id="c-week">0</span></button>
+          <button data-filter="done">Terminés <span class="count" id="c-done">0</span></button>
+          <button data-filter="all">Tous <span class="count" id="c-all">0</span></button>
+        </nav>
 
-      <div class="side-block">
-        <div class="side-head">
+        <div class="side-block">
           <h3>Matières</h3>
-          <button class="icon-btn tiny" id="manageSubjects" title="Gérer les matières" aria-label="Gérer les matières"><span class="ico" data-icon="edit"></span></button>
+          <div id="subjectList" class="subject-list"></div>
         </div>
-        <div id="subjectList" class="subject-list"></div>
-      </div>
 
-      <div class="side-foot">
-        <button class="nav-btn" id="clearDone"><span class="ico" data-icon="trash"></span>Supprimer les terminés</button>
-        <button class="nav-btn" id="settingsBtn"><span class="ico" data-icon="settings"></span>Paramètres</button>
-      </div>
-    </aside>
+        <button class="ghost small" id="clearDone">🧹 Supprimer les terminés</button>
+      </aside>
 
-    <main class="content">
-      <header class="page-head">
-        <div>
-          <h2 id="pageTitle">À faire</h2>
-          <p class="stats" id="stats"></p>
-        </div>
-        <div class="head-actions">
-          <div class="seg view" id="viewSeg" role="radiogroup" aria-label="Affichage">
-            <button data-view="list"><span class="ico" data-icon="list"></span>Liste</button>
-            <button data-view="calendar"><span class="ico" data-icon="calendar"></span>Calendrier</button>
-          </div>
-          <button class="icon-btn" id="themeBtn" title="Changer de thème" aria-label="Changer de thème"><span class="ico" data-icon="moon"></span></button>
-        </div>
-      </header>
-
-      <div class="toolbar">
-        <div class="search-box">
-          <span class="ico" data-icon="search"></span>
+      <section class="content">
+        <div class="toolbar">
           <input type="search" id="search" placeholder="Rechercher un devoir…" autocomplete="off">
+          <select id="sort" aria-label="Trier">
+            <option value="date">Trier par date</option>
+            <option value="priority">Trier par priorité</option>
+            <option value="subject">Trier par matière</option>
+            <option value="created">Plus récents d'abord</option>
+          </select>
         </div>
-        <select id="sort" aria-label="Trier">
-          <option value="date">Trier par date</option>
-          <option value="priority">Trier par priorité</option>
-          <option value="subject">Trier par matière</option>
-          <option value="created">Plus récents d'abord</option>
-        </select>
-      </div>
-
-      <section id="calendar" class="calendar" hidden>
-        <div class="cal-head">
-          <h3 id="calTitle">Novembre 2026</h3>
-          <div class="seg view" id="calModeSeg" role="radiogroup" aria-label="Période">
-            <button data-mode="month">Mois</button>
-            <button data-mode="week">Semaine</button>
-          </div>
-          <div class="cal-nav">
-            <button class="icon-btn" id="calPrev" title="Mois précédent" aria-label="Mois précédent"><span class="ico" data-icon="left"></span></button>
-            <button class="ghost small" id="calToday">Aujourd'hui</button>
-            <button class="icon-btn" id="calNext" title="Mois suivant" aria-label="Mois suivant"><span class="ico" data-icon="right"></span></button>
-          </div>
-          <span class="cal-note" id="calNote"></span>
+        <ul id="list" class="list"></ul>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-emoji">🎉</div>
+          <p id="emptyText">Rien à afficher ici.</p>
         </div>
-        <div class="cal-grid" id="calGrid"></div>
       </section>
-
-      <ul id="list" class="list"></ul>
-      <div id="empty" class="empty" hidden>
-        <div class="empty-emoji">🎉</div>
-        <p id="emptyText">Rien à afficher ici.</p>
-      </div>
     </main>
   </div>
 
-  <!-- Ajouter / modifier un devoir -->
   <dialog id="dialog">
     <form method="dialog" id="form" autocomplete="off">
-      <div class="dlg-head">
-        <h2 id="dialogTitle">Nouveau devoir</h2>
-        <button type="button" class="icon-btn tiny" id="dlgClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
-      </div>
+      <h2 id="dialogTitle">Nouveau devoir</h2>
 
-      <label class="field">
-        <span class="flabel">Titre</span>
+      <label>Titre
         <input type="text" id="f-title" required maxlength="120" placeholder="Ex : Exercices 3 à 7 page 142">
       </label>
 
-      <div class="field">
-        <span class="flabel">Matière</span>
-        <div id="f-subjects" class="chips"></div>
-
-        <div id="quickAdd" class="quick" hidden>
-          <input type="text" id="qa-name" maxlength="30" placeholder="Nom de la nouvelle matière">
-          <div id="qa-palette" class="palette"></div>
-          <div class="quick-actions">
-            <span class="err" id="qa-err"></span>
-            <button type="button" class="ghost small" id="qa-cancel">Annuler</button>
-            <button type="button" class="primary small" id="qa-ok">Ajouter la matière</button>
-          </div>
-        </div>
-
-        <button type="button" class="link" id="manageFromDialog">Gérer les matières (retirer, changer la couleur…)</button>
-      </div>
-
       <div class="row">
-        <label class="field">
-          <span class="flabel">Pour le</span>
+        <label>Matière
+          <input type="text" id="f-subject" list="subjectsData" maxlength="40" placeholder="Maths, Français…">
+          <datalist id="subjectsData"></datalist>
+        </label>
+        <label>Pour le
           <input type="date" id="f-date">
         </label>
-        <div class="field">
-          <span class="flabel">Priorité</span>
-          <div class="seg" id="f-priority" role="radiogroup" aria-label="Priorité">
-            <button type="button" data-value="1">Normale</button>
-            <button type="button" data-value="2">Importante</button>
-            <button type="button" data-value="3">Urgente</button>
-          </div>
-        </div>
       </div>
 
-      <label class="field">
-        <span class="flabel">Notes</span>
+      <label>Priorité
+        <select id="f-priority">
+          <option value="1">Normale</option>
+          <option value="2">Importante</option>
+          <option value="3">Urgente</option>
+        </select>
+      </label>
+
+      <label>Notes
         <textarea id="f-notes" rows="3" maxlength="1000" placeholder="Détails, pages, consignes…"></textarea>
       </label>
 
@@ -147,118 +92,6 @@
         <button type="submit" class="primary" id="saveBtn">Enregistrer</button>
       </div>
     </form>
-  </dialog>
-
-  <!-- Paramètres -->
-  <dialog id="settings" class="settings">
-    <div class="set-wrap">
-      <nav class="set-nav" id="setNav">
-        <h2>Paramètres</h2>
-        <button data-tab="appearance" class="active"><span class="ico" data-icon="palette"></span>Apparence</button>
-        <button data-tab="subjects"><span class="ico" data-icon="book"></span>Matières</button>
-        <button data-tab="homework"><span class="ico" data-icon="sliders"></span>Devoirs</button>
-        <button data-tab="update"><span class="ico" data-icon="download"></span>Mise à jour</button>
-      </nav>
-
-      <button class="icon-btn tiny set-close" id="setClose" aria-label="Fermer les paramètres"><span class="ico" data-icon="x"></span></button>
-
-      <div class="set-body">
-        <!-- Apparence -->
-        <section data-panel="appearance">
-          <h3 class="set-title">Apparence</h3>
-
-          <div class="group">
-            <div class="group-label">Thème</div>
-            <div class="seg wide" id="themeSeg" role="radiogroup" aria-label="Thème">
-              <button data-theme="light"><span class="ico" data-icon="sun"></span>Clair</button>
-              <button data-theme="dark"><span class="ico" data-icon="moon"></span>Sombre</button>
-              <button data-theme="auto"><span class="ico" data-icon="monitor"></span>Automatique</button>
-            </div>
-            <p class="hint">« Automatique » suit le thème de Windows.</p>
-          </div>
-
-          <div class="group">
-            <div class="group-label">Couleur principale</div>
-            <div id="accentList" class="palette"></div>
-          </div>
-        </section>
-
-        <!-- Matières -->
-        <section data-panel="subjects" hidden>
-          <h3 class="set-title">Matières</h3>
-          <p class="hint top">Ces matières apparaissent quand tu ajoutes un devoir. Clique sur une pastille pour changer sa couleur.</p>
-
-          <div id="s-subjects" class="srows"></div>
-
-          <div class="group add-group">
-            <div class="group-label">Ajouter une matière</div>
-            <div class="add-line">
-              <input type="text" id="s-new-name" maxlength="30" placeholder="Ex : Latin, Informatique…" autocomplete="off">
-              <button class="primary" id="s-new-add"><span class="ico" data-icon="plus"></span>Ajouter</button>
-            </div>
-            <div id="s-new-palette" class="palette"></div>
-            <p class="err" id="s-new-err"></p>
-          </div>
-
-          <button class="ghost small" id="s-restore"><span class="ico" data-icon="rotate"></span>Remettre les matières par défaut</button>
-        </section>
-
-        <!-- Devoirs -->
-        <section data-panel="homework" hidden>
-          <h3 class="set-title">Devoirs</h3>
-
-          <div class="setting">
-            <div class="desc">Page affichée au démarrage<small>La liste ouverte quand tu lances l'application.</small></div>
-            <select id="s-start" aria-label="Page affichée au démarrage">
-              <option value="todo">À faire</option>
-              <option value="late">En retard</option>
-              <option value="week">Cette semaine</option>
-              <option value="done">Terminés</option>
-              <option value="all">Tous</option>
-            </select>
-          </div>
-
-          <div class="setting">
-            <div class="desc">Priorité par défaut<small>Utilisée pour chaque nouveau devoir.</small></div>
-            <select id="s-prio" aria-label="Priorité par défaut">
-              <option value="1">Normale</option>
-              <option value="2">Importante</option>
-              <option value="3">Urgente</option>
-            </select>
-          </div>
-
-          <div class="setting">
-            <div class="desc">Confirmer avant de supprimer<small>Demande une confirmation avant de supprimer un devoir.</small></div>
-            <input type="checkbox" class="switch" id="s-confirm" aria-label="Confirmer avant de supprimer">
-          </div>
-        </section>
-
-        <!-- Mise à jour -->
-        <section data-panel="update" hidden>
-          <h3 class="set-title">Mise à jour</h3>
-
-          <div class="setting">
-            <div class="desc">Version installée<small id="u-version">…</small></div>
-            <button class="primary" id="u-check"><span class="ico" data-icon="rotate"></span>Rechercher une mise à jour</button>
-          </div>
-
-          <div id="u-status" class="u-status" hidden>
-            <span class="ico" id="u-icon"></span>
-            <div class="u-text">
-              <strong id="u-title"></strong>
-              <span id="u-sub"></span>
-            </div>
-            <button class="primary small" id="u-open" hidden>Télécharger</button>
-          </div>
-
-          <div class="group u-repo">
-            <div class="group-label">Dépôt GitHub des versions</div>
-            <input type="text" id="u-repo" placeholder="rc9b8hcntp-svg/mydevoirs" autocomplete="off" spellcheck="false">
-            <p class="hint">Le nom de ton dépôt GitHub, par exemple <em>pseudo/mes-devoirs</em>. Les nouvelles versions sont celles publiées dans « Releases ».</p>
-          </div>
-        </section>
-      </div>
-    </div>
   </dialog>
 
   <script src="renderer.js"></script>
