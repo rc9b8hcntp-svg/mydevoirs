@@ -20,7 +20,6 @@
     "files": [
       "main.js",
       "preload.js",
-      "updater.js",
       "src/**/*",
       "build/icon.png"
     ],
@@ -28,26 +27,19 @@
       "icon": "build/icon.png",
       "target": [
         {
-          "target": "nsis",
-          "arch": ["x64", "ia32", "arm64"]
-        },
-        {
-          "target": "portable",
+          "target": "msi",
           "arch": ["x64", "ia32", "arm64"]
         }
-      ],
-      "artifactName": "MesDevoirs-${version}-${arch}.${ext}"
+      ]
     },
-    "portable": {
-      "artifactName": "MesDevoirs-Portable-${version}-${arch}.${ext}"
-    },
-    "nsis": {
-      "artifactName": "MesDevoirs-Installeur-${version}-${arch}.${ext}",
+    "msi": {
+      "artifactName": "MesDevoirs-${version}-${arch}.${ext}",
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "language": "1036"
+      "shortcutName": "Mes Devoirs",
+      "runAfterFinish": true,
+      "warningsAsErrors": false
     }
   },
   "devDependencies": {
