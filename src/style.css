@@ -315,6 +315,16 @@ dialog {
 }
 dialog::backdrop { background: rgba(10, 12, 20, .5); }
 dialog form { display: flex; flex-direction: column; gap: 16px; }
+
+/* Détail d'un devoir (calendrier) */
+dialog.view { display: none; flex-direction: column; gap: 16px; width: min(440px, 94vw); }
+dialog.view[open] { display: flex; }
+.v-body { display: flex; flex-direction: column; gap: 4px; }
+.v-top { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.v-title { font-size: 17px; font-weight: 600; line-height: 1.35; word-break: break-word; }
+.v-title.done { text-decoration: line-through; color: var(--muted); }
+.v-notes { color: var(--muted); font-size: 14px; margin-top: 10px; white-space: pre-wrap; word-wrap: break-word; }
+dialog.view .actions .ico { width: 15px; height: 15px; margin-right: 6px; }
 .dlg-head { display: flex; align-items: center; justify-content: space-between; }
 .dlg-head h2 { margin: 0; font-size: 19px; }
 

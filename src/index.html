@@ -149,6 +149,19 @@
     </form>
   </dialog>
 
+  <!-- Détail d'un devoir (depuis le calendrier) : cocher + modifier -->
+  <dialog id="viewDialog" class="view">
+    <div class="dlg-head">
+      <h2>Devoir</h2>
+      <button type="button" class="icon-btn tiny" id="vClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div id="vBody" class="v-body"></div>
+    <div class="actions">
+      <button type="button" class="ghost" id="vCancel">Fermer</button>
+      <button type="button" class="primary" id="vEdit"><span class="ico" data-icon="edit"></span>Modifier</button>
+    </div>
+  </dialog>
+
   <!-- Paramètres -->
   <dialog id="settings" class="settings">
     <div class="set-wrap">

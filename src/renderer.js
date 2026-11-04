@@ -456,6 +456,62 @@ function renderList() {
   });
 }
 
+// ---------- Détail d'un devoir (calendrier) ----------
+let viewingId = null;
+
+function openView(id) {
+  const h = state.homework.find((x) => x.id === id);
+  if (!h) return;
+  viewingId = id;
+  const color = subjectColor(h.subject);
+  const box = $('vBody');
+  box.textContent = '';
+  box.style.setProperty('--c', color);
+
+  const top = el('label', 'v-top');
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'check';
+  cb.checked = !!h.done;
+  cb.setAttribute('aria-label', 'Marquer comme terminé');
+  const title = el('span', 'v-title' + (h.done ? ' done' : ''), h.title);
+  cb.addEventListener('change', () => {
+    h.done = cb.checked;
+    h.doneAt = cb.checked ? Date.now() : null;
+    title.classList.toggle('done', h.done);
+    persist();
+    render();
+  });
+  top.append(cb, title);
+  box.append(top);
+
+  const meta = el('div', 'meta');
+  if (h.subject) {
+    const t = el('span', 'tag subject');
+    t.style.setProperty('--c', color);
+    t.append(el('span', 'dot'), h.subject);
+    meta.append(t);
+  }
+  if (h.date) {
+    const tag = el('span', 'tag');
+    tag.append(mkIcon('calendar'), formatDate(h.date));
+    meta.append(tag);
+  }
+  if (h.priority > 1) meta.append(el('span', 'tag p' + h.priority, PRIORITY_LABELS[h.priority]));
+  if (meta.children.length) box.append(meta);
+  if (h.notes) box.append(el('div', 'v-notes', h.notes));
+
+  if (!$('viewDialog').open) $('viewDialog').showModal();
+}
+
+$('vClose').addEventListener('click', () => $('viewDialog').close());
+$('vCancel').addEventListener('click', () => $('viewDialog').close());
+$('vEdit').addEventListener('click', () => {
+  const id = viewingId;
+  $('viewDialog').close();
+  if (id) openDialog(id);
+});
+
 // ---------- Calendrier ----------
 function ymd(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -564,7 +620,7 @@ function renderCalendar() {
       }
       chip.style.setProperty('--c', subjectColor(h.subject));
       chip.title = h.title + (h.notes ? '\n' + h.notes : '');
-      chip.addEventListener('click', (e) => { e.stopPropagation(); openDialog(h.id); });
+      chip.addEventListener('click', (e) => { e.stopPropagation(); openView(h.id); });
       box.append(chip);
     });
     cell.append(box);
