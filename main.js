@@ -83,11 +83,11 @@ function createWindow(startHidden) {
   });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
 
-  // Fermer la fenêtre = réduire dans la zone de notification (si l'option est active)
-  win.on('close', (e) => {
+  // Fermer la fenêtre avec l'option « rester en arrière-plan » : on laisse la fenêtre se fermer vraiment
+  // (l'appli reste active dans la zone de notification). Ainsi, quand on la rouvre, c'est une nouvelle
+  // fenêtre et Windows rejoue sa vraie animation d'ouverture (ce que ne fait pas un simple hide/show).
+  win.on('close', () => {
     if (isQuitting || !notifSettings().background) return;
-    e.preventDefault();
-    win.hide();
     showTrayHintOnce();
   });
   win.on('session-end', () => { isQuitting = true; }); // arrêt / déconnexion de Windows
@@ -140,9 +140,11 @@ function notify({ title, body, filter }) {
   liveNotifications.add(n);
   const forget = () => liveNotifications.delete(n);
   n.on('click', () => {
+    const existed = !!mainWindow;
     const win = showWindow();
     const send = () => win.webContents.send('notif:open', filter || 'todo');
-    if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send); else send();
+    // Fenêtre toute neuve (recréée après une fermeture) : on attend que la page soit chargée
+    if (!existed || win.webContents.isLoading()) win.webContents.once('did-finish-load', send); else send();
     forget();
   });
   n.on('close', forget);
@@ -278,6 +280,9 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    if (process.platform === 'darwin') return;
+    // En mode « arrière-plan », fermer la fenêtre ne quitte pas l'appli (elle reste dans la zone de notification)
+    if (!isQuitting && notifSettings().background) return;
+    app.quit();
   });
 }

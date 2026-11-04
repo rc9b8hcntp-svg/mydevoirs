@@ -176,12 +176,18 @@ function hydrateIcons() {
 
 // ---------- Sauvegarde ----------
 let saveTimer = null;
+function saveNow() {
+  saveTimer = null;
+  window.devoirsAPI.save({ homework: state.homework, settings: state.settings });
+}
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    window.devoirsAPI.save({ homework: state.homework, settings: state.settings });
-  }, 150);
+  saveTimer = setTimeout(saveNow, 150);
 }
+// La fenêtre peut être vraiment fermée (puis recréée) : on n'oublie pas une sauvegarde en attente
+window.addEventListener('beforeunload', () => {
+  if (saveTimer) { clearTimeout(saveTimer); saveNow(); }
+});
 
 // ---------- Matières ----------
 function sameName(a, b) {
@@ -264,6 +270,20 @@ function renderPalette(container, selected, onPick) {
     b.addEventListener('click', () => onPick(c.value));
     container.append(b);
   });
+
+  // Sélecteur de couleur avancé (n'importe quelle couleur)
+  const isHex = typeof selected === 'string' && /^#[0-9a-f]{6}$/i.test(selected);
+  const isCustom = isHex && !SUBJECT_COLORS.some((c) => c.value.toLowerCase() === selected.toLowerCase());
+  const custom = el('label', 'swatch custom' + (isCustom ? ' on picked' : ''));
+  custom.style.setProperty('--c', isCustom ? selected : '#888888');
+  custom.title = 'Couleur personnalisée';
+  const input = el('input');
+  input.type = 'color';
+  input.value = isHex ? selected.toLowerCase() : SUBJECT_COLORS[0].value;
+  input.setAttribute('aria-label', 'Choisir une couleur personnalisée');
+  input.addEventListener('change', () => onPick(input.value));
+  custom.append(input);
+  container.append(custom);
 }
 
 // ---------- Filtrage ----------
@@ -911,7 +931,10 @@ $('n-test').addEventListener('click', async () => {
 });
 
 // Clic sur une notification : on ouvre la bonne liste
-window.devoirsAPI.onNotificationOpen((filter) => {
+// (si la fenêtre vient d'être recréée, on attend la fin du chargement des données)
+let appReady = false;
+let pendingOpenFilter = null;
+function openFromNotification(filter) {
   document.querySelectorAll('dialog[open]').forEach((d) => d.close());
   if (FILTER_LABELS[filter]) state.filter = filter;
   state.subject = null;
@@ -919,6 +942,10 @@ window.devoirsAPI.onNotificationOpen((filter) => {
   $('search').value = '';
   state.view = 'list';
   render();
+}
+window.devoirsAPI.onNotificationOpen((filter) => {
+  if (!appReady) { pendingOpenFilter = filter; return; }
+  openFromNotification(filter);
 });
 
 // ----- Mise à jour -----
@@ -1243,4 +1270,6 @@ window.addEventListener('focus', checkDayChange);
   $('sort').value = state.sort;
   applyTheme();
   render();
+  appReady = true;
+  if (pendingOpenFilter !== null) { openFromNotification(pendingOpenFilter); pendingOpenFilter = null; }
 })();
