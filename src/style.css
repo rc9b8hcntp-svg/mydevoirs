@@ -203,7 +203,7 @@ button.link:hover { text-decoration: underline; }
 .search-box { position: relative; flex: 1; min-width: 0; }
 .search-box .ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .search-box input[type="search"] { padding-left: 38px; }
-input[type="text"], input[type="search"], input[type="date"], select, textarea {
+input[type="text"], input[type="search"], input[type="date"], input[type="time"], select, textarea {
   font: inherit;
   color: var(--text);
   background: var(--panel);
@@ -553,6 +553,14 @@ dialog.settings { padding: 0; width: min(800px, 94vw); height: min(560px, 92vh);
 .u-status .ico { width: 24px; height: 24px; color: var(--muted); }
 .u-status .u-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .u-status .u-text span { color: var(--muted); font-size: 13px; }
+.u-status progress { width: 100%; height: 6px; margin-top: 6px; accent-color: var(--accent); }
+.u-notes { margin-top: 14px; padding: 12px 14px; max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); font-size: 14px; }
+.u-notes h4 { margin: 0 0 8px; font-size: 14px; }
+.u-notes h5 { margin: 10px 0 4px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.u-notes p { margin: 4px 0; }
+.u-notes ul { margin: 4px 0; padding-left: 20px; }
+.u-notes li { margin: 2px 0; }
+.u-notes .muted { color: var(--muted); }
 .u-status.ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--border)); background: color-mix(in srgb, var(--ok) 10%, var(--panel)); }
 .u-status.ok .ico { color: var(--ok); }
 .u-status.new { border-color: var(--accent); background: var(--accent-soft); }

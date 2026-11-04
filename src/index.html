@@ -157,6 +157,7 @@
         <button data-tab="appearance" class="active"><span class="ico" data-icon="palette"></span>Apparence</button>
         <button data-tab="subjects"><span class="ico" data-icon="book"></span>Matières</button>
         <button data-tab="homework"><span class="ico" data-icon="sliders"></span>Devoirs</button>
+        <button data-tab="notifications"><span class="ico" data-icon="bell"></span>Notifications</button>
         <button data-tab="update"><span class="ico" data-icon="download"></span>Mise à jour</button>
       </nav>
 
@@ -233,6 +234,52 @@
           </div>
         </section>
 
+        <!-- Notifications -->
+        <section data-panel="notifications" hidden>
+          <h3 class="set-title">Notifications</h3>
+
+          <div class="setting">
+            <div class="desc">Rappel quotidien<small>Une notification Windows avec les devoirs à rendre bientôt.</small></div>
+            <input type="checkbox" class="switch" id="n-enabled" aria-label="Activer le rappel quotidien">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Heure du rappel<small>Chaque jour à cette heure-là.</small></div>
+            <input type="time" id="n-time" aria-label="Heure du rappel">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Devoirs concernés<small>Jusqu'à quand regarder pour le rappel.</small></div>
+            <select id="n-days" aria-label="Devoirs concernés">
+              <option value="0">Ceux du jour</option>
+              <option value="1">Jusqu'à demain</option>
+              <option value="2">Dans les 2 jours</option>
+              <option value="3">Dans les 3 jours</option>
+              <option value="7">Dans la semaine</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Inclure les devoirs en retard<small>Ils sont ajoutés au rappel tant qu'ils ne sont pas terminés.</small></div>
+            <input type="checkbox" class="switch" id="n-late" aria-label="Inclure les devoirs en retard">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Rester actif en arrière-plan<small>Fermer la fenêtre garde l'application dans la zone de notification, pour que les rappels arrivent quand même. Clic droit sur son icône pour la quitter.</small></div>
+            <input type="checkbox" class="switch" id="n-bg" aria-label="Rester actif en arrière-plan">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Lancer au démarrage de Windows<small>L'application démarre discrètement dans la zone de notification.</small></div>
+            <input type="checkbox" class="switch" id="n-startup" aria-label="Lancer au démarrage de Windows">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Tester<small id="n-test-msg">Envoie une notification pour vérifier que tout marche.</small></div>
+            <button class="primary" id="n-test"><span class="ico" data-icon="bell"></span>Tester</button>
+          </div>
+        </section>
+
         <!-- Mise à jour -->
         <section data-panel="update" hidden>
           <h3 class="set-title">Mise à jour</h3>
@@ -242,13 +289,24 @@
             <button class="primary" id="u-check"><span class="ico" data-icon="rotate"></span>Rechercher une mise à jour</button>
           </div>
 
+          <div class="setting">
+            <div class="desc">Version à rechercher<small>« Dernière version » suit les nouveautés. Choisis un tag pour viser une version précise (ou revenir en arrière).</small></div>
+            <select id="u-tag" aria-label="Version à rechercher"><option value="">Dernière version</option></select>
+          </div>
+
           <div id="u-status" class="u-status" hidden>
             <span class="ico" id="u-icon"></span>
             <div class="u-text">
               <strong id="u-title"></strong>
               <span id="u-sub"></span>
+              <progress id="u-progress" max="100" value="0" hidden></progress>
             </div>
             <button class="primary small" id="u-open" hidden>Télécharger</button>
+          </div>
+
+          <div id="u-notes" class="u-notes" hidden>
+            <h4 id="u-notes-title"></h4>
+            <div id="u-notes-body"></div>
           </div>
 
           <div class="group u-repo">

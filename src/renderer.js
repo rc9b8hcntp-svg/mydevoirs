@@ -5,6 +5,7 @@ const PRIORITY_LABELS = { 1: 'Normale', 2: 'Importante', 3: 'Urgente' };
 const FILTER_LABELS = { todo: 'À faire', late: 'En retard', week: 'Cette semaine', done: 'Terminés', all: 'Tous les devoirs' };
 const NEUTRAL = '#8b93a7';
 const DEFAULT_UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
+const NOTIF_DEFAULTS = { enabled: true, time: '18:00', daysAhead: 1, includeLate: true, background: true, startup: false };
 
 // Anciennes couleurs automatiques (utilisées pour garder les couleurs des matières déjà créées)
 const LEGACY_PALETTE = ['#4f6bed', '#e5484d', '#22a06b', '#f59e0b', '#a855f7', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
@@ -75,6 +76,7 @@ const ICONS = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 };
 
@@ -749,6 +751,7 @@ let colorEditing = null; // id de la matière dont on change la couleur
 let newSubjectColor = SUBJECT_COLORS[0].value;
 
 function showTab(tab) {
+  if (tab === 'update') loadTags();
   document.querySelectorAll('#setNav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.set-body section').forEach((s) => { s.hidden = s.dataset.panel !== tab; });
 }
@@ -765,6 +768,7 @@ function openSettings(tab) {
   $('s-prio').value = String(state.settings.defaultPriority);
   $('s-confirm').checked = !!state.settings.confirmDelete;
   $('u-repo').value = state.settings.updateRepo || DEFAULT_UPDATE_REPO;
+  fillNotifSettings();
   window.devoirsAPI.getVersion().then((v) => { $('u-version').textContent = `Mes Devoirs ${v}`; }).catch(() => {});
   if (!$('settings').open) $('settings').showModal();
 }
@@ -863,8 +867,165 @@ $('s-start').addEventListener('change', (e) => { state.settings.startFilter = e.
 $('s-prio').addEventListener('change', (e) => { state.settings.defaultPriority = e.target.value; persist(); });
 $('s-confirm').addEventListener('change', (e) => { state.settings.confirmDelete = e.target.checked; persist(); });
 
+// ----- Notifications -----
+function fillNotifSettings() {
+  const n = state.settings.notifications;
+  $('n-enabled').checked = n.enabled;
+  $('n-time').value = n.time;
+  $('n-days').value = String(n.daysAhead);
+  $('n-late').checked = n.includeLate;
+  $('n-bg').checked = n.background;
+  $('n-startup').checked = n.startup;
+  $('n-startup').disabled = !n.background;
+  $('n-time').disabled = $('n-days').disabled = $('n-late').disabled = !n.enabled;
+  $('n-test-msg').textContent = 'Envoie une notification pour vérifier que tout marche.';
+}
+
+function setNotif(key, value) {
+  state.settings.notifications[key] = value;
+  persist();
+  fillNotifSettings();
+}
+
+$('n-enabled').addEventListener('change', (e) => setNotif('enabled', e.target.checked));
+$('n-time').addEventListener('change', (e) => { if (/^\d{2}:\d{2}$/.test(e.target.value)) setNotif('time', e.target.value); else fillNotifSettings(); });
+$('n-days').addEventListener('change', (e) => setNotif('daysAhead', Number(e.target.value)));
+$('n-late').addEventListener('change', (e) => setNotif('includeLate', e.target.checked));
+$('n-bg').addEventListener('change', (e) => {
+  state.settings.notifications.background = e.target.checked;
+  if (!e.target.checked) state.settings.notifications.startup = false;
+  persist();
+  fillNotifSettings();
+});
+$('n-startup').addEventListener('change', (e) => setNotif('startup', e.target.checked));
+
+$('n-test').addEventListener('click', async () => {
+  const msg = $('n-test-msg');
+  // on laisse le temps à la sauvegarde des réglages d'arriver avant le test
+  await new Promise((r) => setTimeout(r, 250));
+  let r;
+  try { r = await window.devoirsAPI.testNotification(); } catch (e) { r = { ok: false }; }
+  msg.textContent = r && r.ok
+    ? 'Notification envoyée. Rien reçu ? Vérifie que les notifications de Windows ne sont pas coupées (mode « Ne pas déranger » ou assistant de concentration).'
+    : "Impossible d'envoyer la notification sur cet ordinateur.";
+});
+
+// Clic sur une notification : on ouvre la bonne liste
+window.devoirsAPI.onNotificationOpen((filter) => {
+  document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+  if (FILTER_LABELS[filter]) state.filter = filter;
+  state.subject = null;
+  state.search = '';
+  $('search').value = '';
+  state.view = 'list';
+  render();
+});
+
 // ----- Mise à jour -----
 let updateUrl = null;
+
+// Nettoie un peu le texte Markdown d'une release GitHub pour l'afficher simplement (sans HTML)
+function cleanNote(t) {
+  return String(t)
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/(\d+)/g, '#$1')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .replace(/^>\s?/, '')
+    .trim();
+}
+
+function renderNotes(text, version) {
+  const out = $('u-notes-body');
+  out.textContent = '';
+  $('u-notes-title').textContent = `Nouveautés de la version ${version}`;
+  let list = null;
+  let any = false;
+  String(text || '').replace(/\r/g, '').split('\n').forEach((raw) => {
+    const line = raw.trim();
+    if (!line || /^<!--/.test(line) || /^\**full changelog/i.test(line)) { list = null; return; }
+    const head = /^#{1,6}\s+(.*)$/.exec(line);
+    const item = /^[-*+]\s+(.*)$/.exec(line) || /^\d+[.)]\s+(.*)$/.exec(line);
+    const txt = cleanNote(head ? head[1] : item ? item[1] : line);
+    if (!txt) return;
+    any = true;
+    if (head) { list = null; out.append(el('h5', null, txt)); }
+    else if (item) { if (!list) { list = el('ul'); out.append(list); } list.append(el('li', null, txt)); }
+    else { list = null; out.append(el('p', null, txt)); }
+  });
+  if (!any) out.append(el('p', 'muted', "Aucune description n'a été publiée pour cette version."));
+  $('u-notes').hidden = false;
+  $('u-notes').scrollTop = 0;
+}
+let updateCanInstall = false; // un installeur adapté à ce PC existe : téléchargement et installation depuis l'appli
+let installing = false;
+
+function mo(bytes) {
+  return `${(bytes / 1048576).toFixed(1).replace('.', ',')} Mo`;
+}
+
+// Affiche le bouton principal selon qu'on peut installer directement ou qu'il faut passer par la page GitHub
+function setInstallButton(r) {
+  updateCanInstall = !!r.asset;
+  $('u-open').textContent = r.asset ? `Télécharger et installer la ${r.latest}` : `Télécharger la ${r.latest}`;
+  if (r.asset) {
+    $('u-sub').textContent = `${r.asset.name}${r.asset.size ? ` (${mo(r.asset.size)})` : ''} · adapté à ton ordinateur. L'installateur s'ouvrira à la fin du téléchargement.`;
+  } else {
+    $('u-sub').textContent = "Aucun installeur pour ton type d'ordinateur dans cette version : la page de téléchargement va s'ouvrir.";
+  }
+}
+
+const INSTALL_ERRORS = {
+  network: 'Le téléchargement a échoué. Vérifie ta connexion Internet puis réessaie.',
+  size: 'Le fichier téléchargé est incomplet. Réessaie.',
+  hash: 'Le fichier téléchargé est corrompu (empreinte incorrecte). Réessaie.',
+  disk: "Impossible d'enregistrer le fichier sur le disque.",
+  launch: "Le fichier est téléchargé mais l'installateur ne s'est pas ouvert.",
+  busy: 'Un téléchargement est déjà en cours.',
+  'no-asset': 'Aucun installeur trouvé pour ton ordinateur.',
+};
+
+async function installUpdate() {
+  if (installing) return;
+  installing = true;
+  const bar = $('u-progress');
+  $('u-open').disabled = $('u-check').disabled = $('u-tag').disabled = true;
+  $('u-title').textContent = 'Téléchargement en cours…';
+  $('u-sub').textContent = 'Préparation…';
+  bar.value = 0;
+  bar.hidden = false;
+
+  let r;
+  try { r = await window.devoirsAPI.downloadUpdate(); } catch (e) { r = { ok: false, reason: 'network' }; }
+  installing = false;
+  bar.hidden = true;
+
+  if (r && r.ok) {
+    showUpdateStatus('ok', 'check', "L'installateur est ouvert", "Mes Devoirs va se fermer pour laisser l'installation se faire. Suis les étapes de l'installateur.");
+    $('u-open').disabled = true;
+    return;
+  }
+  $('u-open').disabled = $('u-check').disabled = $('u-tag').disabled = false;
+  showUpdateStatus('bad', 'alert', 'Installation impossible', INSTALL_ERRORS[r && r.reason] || 'Une erreur est survenue. Réessaie.', updateUrl);
+  // On propose la page de téléchargement en secours
+  updateCanInstall = false;
+  $('u-open').hidden = false;
+  $('u-open').textContent = 'Ouvrir la page de téléchargement';
+}
+
+window.devoirsAPI.onUpdateProgress(({ received, total }) => {
+  const bar = $('u-progress');
+  if (total > 0) {
+    const pct = Math.min(100, Math.round((received / total) * 100));
+    bar.value = pct;
+    $('u-sub').textContent = `${pct} % · ${mo(received)} sur ${mo(total)}`;
+  } else {
+    bar.removeAttribute('value');
+    $('u-sub').textContent = mo(received);
+  }
+});
 
 function showUpdateStatus(kind, icon, title, sub, url) {
   const box = $('u-status');
@@ -874,34 +1035,44 @@ function showUpdateStatus(kind, icon, title, sub, url) {
   $('u-title').textContent = title;
   $('u-sub').textContent = sub || '';
   updateUrl = url || null;
+  $('u-notes').hidden = true;
+  updateCanInstall = false;
+  $('u-progress').hidden = true;
   $('u-open').hidden = !url;
 }
 
 async function runUpdateCheck() {
   const btn = $('u-check');
   btn.disabled = true;
+  $('u-open').disabled = false;
   showUpdateStatus('', 'clock', 'Recherche en cours…', '');
   const repo = $('u-repo').value.trim();
   state.settings.updateRepo = repo;
   persist();
   let r;
-  try { r = await window.devoirsAPI.checkUpdate(repo); } catch (e) { r = { status: 'error' }; }
+  try { r = await window.devoirsAPI.checkUpdate(repo, $('u-tag').value); } catch (e) { r = { status: 'error' }; }
   btn.disabled = false;
 
   switch (r.status) {
     case 'available':
       showUpdateStatus('new', 'download', `La version ${r.latest} est disponible`, 'Télécharge-la puis installe-la par-dessus la version actuelle.', r.url);
-      $('u-open').textContent = `Télécharger la ${r.latest}`;
+      setInstallButton(r);
+      renderNotes(r.notes, r.latest);
+      break;
+    case 'older':
+      showUpdateStatus('new', 'download', `La version ${r.latest} est plus ancienne que la tienne`, 'Tu peux quand même la télécharger pour revenir en arrière.', r.url);
+      setInstallButton(r);
+      renderNotes(r.notes, r.latest);
       break;
     case 'up-to-date':
-      showUpdateStatus('ok', 'check', 'Tu as la dernière version', `Version ${r.latest}`);
+      showUpdateStatus('ok', 'check', $('u-tag').value ? `Tu as déjà la version ${r.latest}` : 'Tu as la dernière version', `Version ${r.latest}`);
       break;
     case 'no-repo':
       showUpdateStatus('bad', 'alert', 'Dépôt GitHub manquant', 'Écris le nom de ton dépôt (ex : pseudo/mes-devoirs) ci-dessous.');
       $('u-repo').focus();
       break;
     case 'no-release':
-      showUpdateStatus('bad', 'alert', 'Aucune version trouvée', 'Vérifie le nom du dépôt, ou publie une version dans « Releases » sur GitHub.');
+      showUpdateStatus('bad', 'alert', 'Aucune version trouvée', $('u-tag').value ? 'Ce tag n\'existe pas (ou plus) dans les « Releases » du dépôt.' : 'Vérifie le nom du dépôt, ou publie une version dans « Releases » sur GitHub.');
       break;
     case 'network':
       showUpdateStatus('bad', 'alert', 'Impossible de vérifier', 'Vérifie ta connexion Internet puis réessaie.');
@@ -911,8 +1082,40 @@ async function runUpdateCheck() {
   }
 }
 
+// Remplit la liste des tags depuis GitHub (en cas d'échec, il reste « Dernière version »)
+async function loadTags() {
+  const sel = $('u-tag');
+  const wanted = state.settings.updateTag || '';
+  const repo = $('u-repo').value.trim() || state.settings.updateRepo || DEFAULT_UPDATE_REPO;
+  let r;
+  try { r = await window.devoirsAPI.listReleases(repo); } catch (e) { r = { status: 'error' }; }
+  const tags = r && r.status === 'ok' ? r.releases : [];
+  sel.textContent = '';
+  const last = document.createElement('option');
+  last.value = '';
+  last.textContent = 'Dernière version';
+  sel.append(last);
+  // le tag déjà choisi reste proposé même si la liste n'a pas pu être chargée
+  const list = tags.map((t) => t.tag);
+  if (wanted && !list.includes(wanted)) list.push(wanted);
+  list.forEach((tag) => {
+    const o = document.createElement('option');
+    o.value = tag;
+    const pre = tags.find((t) => t.tag === tag);
+    o.textContent = tag + (pre && pre.prerelease ? ' (préversion)' : '');
+    sel.append(o);
+  });
+  sel.value = wanted;
+}
+
+$('u-tag').addEventListener('change', (e) => { state.settings.updateTag = e.target.value; persist(); });
+$('u-repo').addEventListener('change', () => loadTags());
+
 $('u-check').addEventListener('click', runUpdateCheck);
-$('u-open').addEventListener('click', () => { if (updateUrl) window.devoirsAPI.openUpdatePage(updateUrl); });
+$('u-open').addEventListener('click', () => {
+  if (updateCanInstall) installUpdate();
+  else if (updateUrl) window.devoirsAPI.openUpdatePage(updateUrl);
+});
 $('u-repo').addEventListener('keydown', (e) => { if (e.key === 'Enter') runUpdateCheck(); });
 $('u-repo').addEventListener('change', (e) => { state.settings.updateRepo = e.target.value.trim(); persist(); });
 
@@ -1019,9 +1222,10 @@ window.addEventListener('focus', checkDayChange);
   const data = await window.devoirsAPI.load();
   state.homework = data.homework;
 
-  const defaults = { theme: 'light', accent: 'indigo', sort: 'date', startFilter: 'todo', defaultPriority: '1', confirmDelete: true, updateRepo: DEFAULT_UPDATE_REPO, view: 'list', calMode: 'month' };
+  const defaults = { theme: 'light', accent: 'indigo', sort: 'date', startFilter: 'todo', defaultPriority: '1', confirmDelete: true, updateRepo: DEFAULT_UPDATE_REPO, view: 'list', calMode: 'month', updateTag: '' };
   state.settings = Object.assign(defaults, data.settings);
   state.settings.defaultPriority = String(state.settings.defaultPriority);
+  state.settings.notifications = Object.assign({}, NOTIF_DEFAULTS, data.settings && data.settings.notifications);
 
   if (Array.isArray(state.settings.subjects)) {
     state.settings.subjects = state.settings.subjects
