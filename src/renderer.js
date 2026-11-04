@@ -76,6 +76,7 @@ const ICONS = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
+  keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 };
@@ -502,6 +503,7 @@ function openView(id) {
   if (h.notes) box.append(el('div', 'v-notes', h.notes));
 
   if (!$('viewDialog').open) $('viewDialog').showModal();
+  cb.focus(); // Espace coche / décoche
 }
 
 $('vClose').addEventListener('click', () => $('viewDialog').close());
@@ -1285,10 +1287,118 @@ $('clearDone').addEventListener('click', () => {
   }
 });
 
+// ---------- Raccourcis clavier ----------
+const SHORTCUTS = [
+  ['Général', [
+    ['Ctrl+N', 'Nouveau devoir'],
+    ['Ctrl+F|/', 'Rechercher'],
+    ['Échap', 'Fermer la fenêtre ouverte, vider la recherche'],
+    ['Ctrl+,', 'Paramètres'],
+    ['Ctrl+Maj+D', 'Changer de thème'],
+    ['F1|?', 'Afficher cette aide'],
+  ]],
+  ['Navigation', [
+    ['1 à 5', 'À faire · En retard · Cette semaine · Terminés · Tous'],
+    ['L', 'Vue liste'],
+    ['C', 'Vue calendrier'],
+  ]],
+  ['Calendrier', [
+    ['←', 'Période précédente'],
+    ['→', 'Période suivante'],
+    ['T', "Revenir à aujourd'hui"],
+    ['M', 'Affichage par mois'],
+    ['S', 'Affichage par semaine'],
+  ]],
+  ["Formulaire d'un devoir", [
+    ['Ctrl+Entrée', 'Enregistrer'],
+  ]],
+  ["Détail d'un devoir (calendrier)", [
+    ['Espace', 'Cocher / décocher'],
+    ['E', 'Modifier'],
+  ]],
+];
+
+function openHelp() {
+  const box = $('helpBody');
+  if (!box.firstChild) {
+    SHORTCUTS.forEach(([title, rows]) => {
+      box.append(el('div', 'help-title', title));
+      rows.forEach(([keys, label]) => {
+        const row = el('div', 'help-row');
+        const k = el('span', 'help-keys');
+        keys.split('|').forEach((alt, i) => {
+          if (i > 0) k.append(el('span', 'help-or', 'ou'));
+          alt.split('+').forEach((key) => k.append(el('kbd', null, key)));
+        });
+        row.append(k, el('span', null, label));
+        box.append(row);
+      });
+    });
+  }
+  $('helpDialog').showModal();
+}
+$('helpBtn').addEventListener('click', openHelp);
+$('hClose').addEventListener('click', () => $('helpDialog').close());
+$('hOk').addEventListener('click', () => $('helpDialog').close());
+
+function isTyping(t) {
+  if (!t || (t.closest && t.closest('dialog:not([open])'))) return false;
+  if (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+  return t.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'color'].includes(t.type);
+}
+
 document.addEventListener('keydown', (e) => {
-  if (document.querySelector('dialog[open]')) return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); openDialog(null); }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('search').focus(); }
+  if (e.defaultPrevented || e.isComposing || e.altKey) return; // Alt : aussi AltGr (Ctrl+Alt) des claviers AZERTY
+  const mod = e.ctrlKey || e.metaKey;
+  const key = (e.key || '').toLowerCase();
+  const openDlg = document.querySelector('dialog[open]');
+
+  // Une fenêtre est ouverte
+  if (openDlg) {
+    if (openDlg.id === 'dialog' && mod && e.key === 'Enter') { e.preventDefault(); $('form').requestSubmit(); }
+    else if (openDlg.id === 'viewDialog' && !mod && !e.shiftKey && key === 'e' && !isTyping(e.target)) { e.preventDefault(); $('vEdit').click(); }
+    return;
+  }
+
+  if (mod) {
+    if (key === 'n' && !e.shiftKey) { e.preventDefault(); openDialog(null); }
+    else if (key === 'f' && !e.shiftKey) { e.preventDefault(); $('search').focus(); $('search').select(); }
+    else if (e.key === ',' || e.code === 'Comma') { e.preventDefault(); openSettings('appearance'); }
+    else if (key === 'd' && e.shiftKey) { e.preventDefault(); $('themeBtn').click(); }
+    return;
+  }
+
+  if (e.key === 'F1') { e.preventDefault(); openHelp(); return; }
+
+  // Dans un champ de saisie : seule la touche Échap sert (vider la recherche)
+  if (isTyping(e.target)) {
+    if (e.key === 'Escape' && e.target === $('search')) {
+      if ($('search').value) { $('search').value = ''; $('search').dispatchEvent(new Event('input')); } else { $('search').blur(); }
+    }
+    return;
+  }
+
+  if (e.key === '?') { e.preventDefault(); openHelp(); return; }
+  if (e.key === '/') { e.preventDefault(); $('search').focus(); return; }
+
+  // Chiffres : on lit la touche physique (sur un clavier AZERTY, « 1 » sans Maj donne « & »)
+  const digit = /^(?:Digit|Numpad)([1-5])$/.exec(e.code || '');
+  if (digit && !e.shiftKey) {
+    e.preventDefault();
+    const f = ['todo', 'late', 'week', 'done', 'all'][Number(digit[1]) - 1];
+    document.querySelector(`#filters button[data-filter="${f}"]`).click();
+    return;
+  }
+  if (e.shiftKey) return;
+
+  const cal = state.view === 'calendar';
+  if (key === 'l') document.querySelector('#viewSeg button[data-view="list"]').click();
+  else if (key === 'c') document.querySelector('#viewSeg button[data-view="calendar"]').click();
+  else if (cal && e.key === 'ArrowLeft') { e.preventDefault(); $('calPrev').click(); }
+  else if (cal && e.key === 'ArrowRight') { e.preventDefault(); $('calNext').click(); }
+  else if (cal && key === 't') $('calToday').click();
+  else if (cal && key === 'm') document.querySelector('#calModeSeg button[data-mode="month"]').click();
+  else if (cal && key === 's') document.querySelector('#calModeSeg button[data-mode="week"]').click();
 });
 
 // Rafraîchir à minuit (changement de jour) et au retour sur la fenêtre

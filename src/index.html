@@ -15,7 +15,7 @@
         <h1>Mes Devoirs</h1>
       </div>
 
-      <button class="primary big" id="newBtn"><span class="ico" data-icon="plus"></span>Nouveau devoir</button>
+      <button class="primary big" id="newBtn" title="Nouveau devoir (Ctrl+N)"><span class="ico" data-icon="plus"></span>Nouveau devoir</button>
 
       <nav class="filters" id="filters">
         <button data-filter="todo" class="active"><span class="ico" data-icon="circle"></span><span class="lbl">À faire</span><span class="count" id="c-todo">0</span></button>
@@ -35,6 +35,7 @@
 
       <div class="side-foot">
         <button class="nav-btn" id="clearDone"><span class="ico" data-icon="trash"></span>Supprimer les terminés</button>
+        <button class="nav-btn" id="helpBtn"><span class="ico" data-icon="keyboard"></span>Raccourcis clavier</button>
         <button class="nav-btn" id="settingsBtn"><span class="ico" data-icon="settings"></span>Paramètres</button>
       </div>
     </aside>
@@ -50,14 +51,14 @@
             <button data-view="list"><span class="ico" data-icon="list"></span>Liste</button>
             <button data-view="calendar"><span class="ico" data-icon="calendar"></span>Calendrier</button>
           </div>
-          <button class="icon-btn" id="themeBtn" title="Changer de thème" aria-label="Changer de thème"><span class="ico" data-icon="moon"></span></button>
+          <button class="icon-btn" id="themeBtn" title="Changer de thème (Ctrl+Maj+D)" aria-label="Changer de thème"><span class="ico" data-icon="moon"></span></button>
         </div>
       </header>
 
       <div class="toolbar">
         <div class="search-box">
           <span class="ico" data-icon="search"></span>
-          <input type="search" id="search" placeholder="Rechercher un devoir…" autocomplete="off">
+          <input type="search" id="search" title="Rechercher (Ctrl+F ou /)" placeholder="Rechercher un devoir…" autocomplete="off">
         </div>
         <select id="sort" aria-label="Trier">
           <option value="date">Trier par date</option>
@@ -160,6 +161,16 @@
       <button type="button" class="ghost" id="vCancel">Fermer</button>
       <button type="button" class="primary" id="vEdit"><span class="ico" data-icon="edit"></span>Modifier</button>
     </div>
+  </dialog>
+
+  <!-- Aide : raccourcis clavier -->
+  <dialog id="helpDialog" class="view help">
+    <div class="dlg-head">
+      <h2>Raccourcis clavier</h2>
+      <button type="button" class="icon-btn tiny" id="hClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div id="helpBody" class="help-body"></div>
+    <div class="actions"><button type="button" class="primary" id="hOk">OK</button></div>
   </dialog>
 
   <!-- Paramètres -->

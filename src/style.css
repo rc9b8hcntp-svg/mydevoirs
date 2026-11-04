@@ -324,6 +324,26 @@ dialog.view[open] { display: flex; }
 .v-title { font-size: 17px; font-weight: 600; line-height: 1.35; word-break: break-word; }
 .v-title.done { text-decoration: line-through; color: var(--muted); }
 .v-notes { color: var(--muted); font-size: 14px; margin-top: 10px; white-space: pre-wrap; word-wrap: break-word; }
+dialog.help { width: min(520px, 94vw); max-height: 90vh; overflow: hidden; }
+dialog.help[open] { display: flex; }
+.help-body { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; flex: 1; padding-right: 4px; }
+.help-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
+.help-title:first-child { margin-top: 0; }
+.help-row { display: flex; align-items: center; gap: 14px; padding: 6px 0; font-size: 14px; }
+.help-keys { display: flex; align-items: center; gap: 4px; flex: 0 0 170px; flex-wrap: wrap; }
+.help-or { color: var(--muted); font-size: 12px; margin: 0 2px; }
+kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 7px;
+  text-align: center;
+  font: 600 12px/1.5 inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  color: var(--text);
+}
 dialog.view .actions .ico { width: 15px; height: 15px; margin-right: 6px; }
 .dlg-head { display: flex; align-items: center; justify-content: space-between; }
 .dlg-head h2 { margin: 0; font-size: 19px; }
