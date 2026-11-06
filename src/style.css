@@ -645,3 +645,7 @@ button:disabled { opacity: .6; cursor: default; }
   .row { flex-direction: column; }
   .row > .field:first-child { width: auto; }
 }
+
+/* Sauvegarde : import */
+.bi-mode-group { margin: 18px 0 20px; }
+#bi-box .u-status { margin-top: 4px; }

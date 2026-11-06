@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('devoirsAPI', {
   listReleases: (repo) => ipcRenderer.invoke('update:list', repo),
   openUpdatePage: (url) => ipcRenderer.invoke('update:open', url),
   testNotification: () => ipcRenderer.invoke('notif:test'),
+  exportBackup: (data, parts) => ipcRenderer.invoke('backup:export', data, parts),
+  pickBackup: () => ipcRenderer.invoke('backup:pick'),
+  applyBackup: (current, options) => ipcRenderer.invoke('backup:apply', current, options),
+  cancelBackup: () => ipcRenderer.invoke('backup:cancel'),
   // Appelé quand l'utilisateur clique sur une notification (reçoit le filtre à afficher)
   onNotificationOpen: (cb) => ipcRenderer.on('notif:open', (_e, filter) => cb(filter)),
 });

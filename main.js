@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, Notification, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, Notification, Tray, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { checkForUpdate, listReleases } = require('./updater');
 const { downloadFile } = require('./downloader');
 const { normalizeSettings, buildDigest, isDue, ymd } = require('./notifier');
+const backup = require('./backup');
 
 // Nécessaire pour que Windows affiche correctement les notifications de l'appli
 app.setAppUserModelId('fr.maxence.mesdevoirs');
@@ -204,6 +205,72 @@ ipcMain.handle('notif:test', () => {
   });
   return { ok };
 });
+
+// ---------- Sauvegardes (fichiers de mémoire) : export / import ----------
+const FILE_FILTERS = [
+  { name: 'Sauvegarde Mes Devoirs (.json)', extensions: ['json'] },
+  { name: 'Tous les fichiers', extensions: ['*'] },
+];
+let pendingImport = null; // fichier choisi, lu et nettoyé, en attente de la décision de l'utilisateur
+
+ipcMain.handle('backup:export', async (e, data, parts) => {
+  try {
+    const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
+    const r = await dialog.showSaveDialog(win, {
+      title: 'Exporter une sauvegarde',
+      defaultPath: path.join(app.getPath('documents'), backup.defaultFileName()),
+      filters: FILE_FILTERS,
+    });
+    if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+    const file = backup.buildBackup(data, parts, app.getVersion());
+    writeJson(r.filePath, file);
+    return {
+      ok: true,
+      name: path.basename(r.filePath),
+      dir: path.dirname(r.filePath),
+      homework: file.homework ? file.homework.length : null,
+      subjects: file.subjects ? file.subjects.length : null,
+    };
+  } catch (err) {
+    return { ok: false, reason: 'write' };
+  }
+});
+
+ipcMain.handle('backup:pick', async (e) => {
+  pendingImport = null;
+  try {
+    const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Importer une sauvegarde',
+      properties: ['openFile'],
+      filters: FILE_FILTERS,
+    });
+    if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
+    const file = r.filePaths[0];
+    if (fs.statSync(file).size > backup.MAX_FILE_BYTES) return { ok: false, reason: 'size' };
+    const parsed = backup.parseBackup(fs.readFileSync(file, 'utf8'));
+    if (!parsed.ok) return parsed;
+    pendingImport = parsed.data;
+    return { ok: true, name: path.basename(file), counts: parsed.counts, exportedAt: parsed.exportedAt };
+  } catch (err) {
+    return { ok: false, reason: 'read' };
+  }
+});
+
+ipcMain.handle('backup:apply', (_e, current, options) => {
+  if (!pendingImport) return { ok: false, reason: 'none' };
+  try {
+    // Copie de secours de l'état actuel avant de toucher à quoi que ce soit
+    try { writeJson(path.join(app.getPath('userData'), 'avant-import.json'), { saved: new Date().toISOString(), ...current }); } catch (err) { /* pas bloquant */ }
+    const r = backup.applyImport(current, pendingImport, options);
+    pendingImport = null;
+    return { ok: true, state: r.state, report: r.report };
+  } catch (err) {
+    return { ok: false, reason: 'apply' };
+  }
+});
+
+ipcMain.handle('backup:cancel', () => { pendingImport = null; return true; });
 
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('update:check', async (_e, repo, tag) => {

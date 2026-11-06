@@ -22,6 +22,7 @@
       "preload.js",
       "updater.js",
       "notifier.js",
+      "backup.js",
       "downloader.js",
       "src/**/*",
       "build/icon.png"

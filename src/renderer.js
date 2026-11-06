@@ -73,6 +73,8 @@ const ICONS = {
   sliders: '<path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
   rotate: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
   download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
+  upload: '<path d="M12 15V3M7 8l5-5 5 5M4 21h16"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
@@ -830,6 +832,7 @@ let newSubjectColor = SUBJECT_COLORS[0].value;
 
 function showTab(tab) {
   if (tab === 'update') loadTags();
+  if (tab !== 'backup' && typeof resetImportBox === 'function' && !$('bi-box').hidden) { window.devoirsAPI.cancelBackup(); resetImportBox(); }
   document.querySelectorAll('#setNav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.set-body section').forEach((s) => { s.hidden = s.dataset.panel !== tab; });
 }
@@ -1004,6 +1007,159 @@ function openFromNotification(filter) {
 window.devoirsAPI.onNotificationOpen((filter) => {
   if (!appReady) { pendingOpenFilter = filter; return; }
   openFromNotification(filter);
+});
+
+// ----- Sauvegarde : export / import -----
+const BACKUP_ERRORS = {
+  json: "Ce fichier n'est pas une sauvegarde valide.",
+  format: "Ce fichier n'est pas une sauvegarde valide.",
+  'other-app': "Ce fichier vient d'une autre application.",
+  'too-new': "Ce fichier vient d'une version plus récente de Mes Devoirs. Mets l'application à jour d'abord.",
+  empty: "Ce fichier ne contient rien à importer.",
+  size: 'Ce fichier est trop gros pour être une sauvegarde.',
+  read: 'Impossible de lire ce fichier.',
+  write: "Impossible d'écrire le fichier à cet endroit.",
+  none: "Choisis d'abord un fichier à importer.",
+  apply: "L'import a échoué. Tes données n'ont pas été modifiées.",
+};
+const pl = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+let importMode = 'merge';
+let importCounts = null;
+
+function resetImportBox() {
+  $('bi-box').hidden = true;
+  $('bi-pick-row').hidden = false;
+  $('bi-err').textContent = '';
+  importCounts = null;
+}
+
+function updateImportHint() {
+  document.querySelectorAll('#bi-mode button').forEach((b) => {
+    const on = b.dataset.mode === importMode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  $('bi-mode-hint').textContent = importMode === 'merge'
+    ? "Ajoute les devoirs et matières qui te manquent. Rien de ce que tu as déjà n'est supprimé ni modifié."
+    : 'Remplace tes devoirs et matières par ceux du fichier. Une copie de tes données actuelles est gardée au cas où.';
+  const any = ['homework', 'subjects', 'settings'].some((k) => !$(`bi-row-${k}`).hidden && $(`bi-${k}`).checked);
+  $('bi-apply').disabled = !any;
+}
+
+// Remet l'interface d'accord avec les données (après un import)
+function refreshAfterImport() {
+  state.sort = SORT_VALUES.includes(state.settings.sort) ? state.settings.sort : 'date';
+  state.view = state.settings.view === 'calendar' ? 'calendar' : 'list';
+  state.calMode = state.settings.calMode === 'week' ? 'week' : 'month';
+  if (state.subject !== null && !findSubject(state.subject)) state.subject = null;
+  $('sort').value = state.sort;
+  $('s-start').value = state.settings.startFilter;
+  $('s-prio').value = String(state.settings.defaultPriority);
+  $('s-confirm').checked = !!state.settings.confirmDelete;
+  fillNotifSettings();
+  applyTheme();
+  renderSubjectManager();
+  render();
+}
+const SORT_VALUES = ['date', 'priority', 'subject', 'created'];
+
+$('bx-go').addEventListener('click', async () => {
+  const parts = { homework: $('bx-homework').checked, subjects: $('bx-subjects').checked, settings: $('bx-settings').checked };
+  const msg = $('bx-msg');
+  if (!parts.homework && !parts.subjects && !parts.settings) { msg.textContent = 'Choisis au moins une partie à exporter.'; return; }
+  $('bx-go').disabled = true;
+  let r;
+  try { r = await window.devoirsAPI.exportBackup({ homework: state.homework, settings: state.settings }, parts); } catch (e) { r = { ok: false, reason: 'write' }; }
+  $('bx-go').disabled = false;
+  if (r && r.ok) {
+    const bits = [];
+    if (r.homework !== null) bits.push(pl(r.homework, 'devoir', 'devoirs'));
+    if (r.subjects !== null) bits.push(pl(r.subjects, 'matière', 'matières'));
+    msg.textContent = `Fichier « ${r.name} » enregistré${bits.length ? ` (${bits.join(', ')})` : ''}.`;
+  } else if (r && r.canceled) {
+    msg.textContent = "Tu choisis où l'enregistrer.";
+  } else {
+    msg.textContent = BACKUP_ERRORS[(r && r.reason) || 'write'];
+  }
+});
+
+$('bi-pick').addEventListener('click', async () => {
+  $('bi-err').textContent = '';
+  $('bi-pick').disabled = true;
+  let r;
+  try { r = await window.devoirsAPI.pickBackup(); } catch (e) { r = { ok: false, reason: 'read' }; }
+  $('bi-pick').disabled = false;
+  if (!r || r.canceled) return;
+  if (!r.ok) { $('bi-err').textContent = BACKUP_ERRORS[r.reason] || BACKUP_ERRORS.read; return; }
+
+  importCounts = r.counts;
+  importMode = 'merge';
+  $('bi-title').textContent = r.name;
+  $('bi-sub').textContent = r.exportedAt
+    ? `Sauvegarde du ${new Date(r.exportedAt).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}`
+    : 'Sauvegarde sans date';
+  const c = r.counts;
+  [['homework', c.homework, 'devoir', 'devoirs'], ['subjects', c.subjects, 'matière', 'matières']].forEach(([k, n, one, many]) => {
+    $(`bi-row-${k}`).hidden = n === null;
+    $(`bi-n-${k}`).textContent = n === null ? '' : `${pl(n, one, many)} dans le fichier.`;
+    $(`bi-${k}`).checked = n !== null;
+  });
+  $('bi-row-settings').hidden = c.settings === null || c.settings === 0;
+  $('bi-settings').checked = !$('bi-row-settings').hidden;
+  $('bi-pick-row').hidden = true;
+  $('bi-box').hidden = false;
+  updateImportHint();
+  $('bi-box').scrollIntoView({ block: 'nearest' });
+});
+
+$('bi-mode').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b) return;
+  importMode = b.dataset.mode;
+  updateImportHint();
+});
+['homework', 'subjects', 'settings'].forEach((k) => $(`bi-${k}`).addEventListener('change', updateImportHint));
+
+$('bi-cancel').addEventListener('click', () => {
+  window.devoirsAPI.cancelBackup();
+  resetImportBox();
+});
+
+$('bi-apply').addEventListener('click', async () => {
+  const options = {
+    mode: importMode,
+    homework: !$('bi-row-homework').hidden && $('bi-homework').checked,
+    subjects: !$('bi-row-subjects').hidden && $('bi-subjects').checked,
+    settings: !$('bi-row-settings').hidden && $('bi-settings').checked,
+  };
+  if (importMode === 'replace' && (options.homework || options.subjects)) {
+    const what = [options.homework && 'tes devoirs', options.subjects && 'tes matières'].filter(Boolean).join(' et ');
+    if (!confirm(`Remplacer ${what} actuels par ceux du fichier ?\n\nUne copie de tes données actuelles est gardée au cas où.`)) return;
+  }
+  $('bi-apply').disabled = true;
+  let r;
+  try { r = await window.devoirsAPI.applyBackup({ homework: state.homework, settings: state.settings }, options); } catch (e) { r = { ok: false, reason: 'apply' }; }
+  if (!r || !r.ok) {
+    $('bi-err').textContent = BACKUP_ERRORS[(r && r.reason) || 'apply'];
+    $('bi-apply').disabled = false;
+    return;
+  }
+
+  state.homework = r.state.homework;
+  state.settings = Object.assign(state.settings, r.state.settings);
+  state.settings.defaultPriority = String(state.settings.defaultPriority);
+  clearTimeout(saveTimer);
+  saveNow();
+  refreshAfterImport();
+
+  const rep = r.report;
+  const bits = [];
+  if (options.homework) bits.push(rep.replaced ? pl(rep.homeworkAdded, 'devoir importé', 'devoirs importés')
+    : `${pl(rep.homeworkAdded, 'devoir ajouté', 'devoirs ajoutés')}${rep.homeworkSkipped ? ` (${pl(rep.homeworkSkipped, 'déjà présent', 'déjà présents')})` : ''}`);
+  if (options.subjects) bits.push(rep.replaced ? pl(rep.subjectsAdded, 'matière importée', 'matières importées') : pl(rep.subjectsAdded, 'matière ajoutée', 'matières ajoutées'));
+  if (rep.settingsApplied) bits.push('réglages appliqués');
+  resetImportBox();
+  $('bi-msg').textContent = `Import terminé : ${bits.join(', ')}.`;
 });
 
 // ----- Mise à jour -----

@@ -182,6 +182,7 @@
         <button data-tab="subjects"><span class="ico" data-icon="book"></span>Matières</button>
         <button data-tab="homework"><span class="ico" data-icon="sliders"></span>Devoirs</button>
         <button data-tab="notifications"><span class="ico" data-icon="bell"></span>Notifications</button>
+        <button data-tab="backup"><span class="ico" data-icon="save"></span>Sauvegarde</button>
         <button data-tab="update"><span class="ico" data-icon="download"></span>Mise à jour</button>
       </nav>
 
@@ -301,6 +302,78 @@
           <div class="setting">
             <div class="desc">Tester<small id="n-test-msg">Envoie une notification pour vérifier que tout marche.</small></div>
             <button class="primary" id="n-test"><span class="ico" data-icon="bell"></span>Tester</button>
+          </div>
+        </section>
+
+        <!-- Sauvegarde -->
+        <section data-panel="backup" hidden>
+          <h3 class="set-title">Sauvegarde</h3>
+          <p class="hint top">Exporte tes données dans un fichier pour les garder en sécurité ou les retrouver sur un autre ordinateur, puis réimporte-le quand tu veux.</p>
+
+          <div class="group">
+            <div class="group-label">Exporter</div>
+            <div class="setting">
+              <div class="desc">Devoirs<small>Tous tes devoirs, terminés ou non.</small></div>
+              <input type="checkbox" class="switch" id="bx-homework" checked aria-label="Exporter les devoirs">
+            </div>
+            <div class="setting">
+              <div class="desc">Matières<small>La liste de tes matières et leurs couleurs.</small></div>
+              <input type="checkbox" class="switch" id="bx-subjects" checked aria-label="Exporter les matières">
+            </div>
+            <div class="setting">
+              <div class="desc">Réglages<small>Apparence, préférences et notifications.</small></div>
+              <input type="checkbox" class="switch" id="bx-settings" checked aria-label="Exporter les réglages">
+            </div>
+            <div class="setting">
+              <div class="desc">Créer le fichier<small id="bx-msg">Tu choisis où l'enregistrer.</small></div>
+              <button class="primary" id="bx-go"><span class="ico" data-icon="download"></span>Exporter</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Importer</div>
+            <div class="setting" id="bi-pick-row">
+              <div class="desc">Choisir un fichier<small id="bi-msg">Une sauvegarde créée par Mes Devoirs.</small></div>
+              <button class="primary" id="bi-pick"><span class="ico" data-icon="upload"></span>Importer…</button>
+            </div>
+
+            <div id="bi-box" hidden>
+              <div class="u-status new">
+                <span class="ico" data-icon="save"></span>
+                <div class="u-text">
+                  <strong id="bi-title"></strong>
+                  <span id="bi-sub"></span>
+                </div>
+              </div>
+
+              <div class="setting" id="bi-row-homework">
+                <div class="desc">Devoirs<small id="bi-n-homework"></small></div>
+                <input type="checkbox" class="switch" id="bi-homework" aria-label="Importer les devoirs">
+              </div>
+              <div class="setting" id="bi-row-subjects">
+                <div class="desc">Matières<small id="bi-n-subjects"></small></div>
+                <input type="checkbox" class="switch" id="bi-subjects" aria-label="Importer les matières">
+              </div>
+              <div class="setting" id="bi-row-settings">
+                <div class="desc">Réglages<small>Remplacent tes réglages actuels (thème, notifications…).</small></div>
+                <input type="checkbox" class="switch" id="bi-settings" aria-label="Importer les réglages">
+              </div>
+
+              <div class="group bi-mode-group">
+                <div class="group-label">Que faire des devoirs et matières actuels ?</div>
+                <div class="seg wide" id="bi-mode" role="radiogroup" aria-label="Mode d'import">
+                  <button data-mode="merge" class="on">Fusionner</button>
+                  <button data-mode="replace">Tout remplacer</button>
+                </div>
+                <p class="hint" id="bi-mode-hint"></p>
+              </div>
+
+              <div class="add-line">
+                <button class="primary" id="bi-apply"><span class="ico" data-icon="check"></span>Importer</button>
+                <button class="ghost" id="bi-cancel">Annuler</button>
+              </div>
+            </div>
+            <p class="err" id="bi-err"></p>
           </div>
         </section>
 
