@@ -42,17 +42,6 @@ npm start          # lancer l'appli pour tester
 npm run dist       # construire les 3 .msi dans le dossier dist/
 ```
 
-## Publier une version
-
-Le workflow GitHub **ne démarre plus tout seul** quand tu ajoutes des fichiers : tu le lances toi-même.
-
-1. Sur GitHub : onglet **Actions** → **Construire Mes Devoirs (Windows)** → **Run workflow**
-2. Dans le champ **version**, écris le numéro voulu au format `x.y.z` (ex : `1.2.0`), ou laisse vide pour la numérotation automatique `1.0.<numéro du run>`
-   Dans le champ **notes**, écris la description de la version, affichée dans l'appli avant l'installation (`\n` pour aller à la ligne, `- ` pour une liste, ex : `## Nouveautés\n- Notifications\n- Choix du tag`). Vide = notes générées automatiquement par GitHub
-3. Les 3 `.msi` sont construits puis publiés dans une release dont le tag est `v<version>` (ex : `v1.2.0`)
-
-Le numéro doit contenir uniquement des chiffres (limite du format `.msi` : premier nombre ≤ 255, deuxième ≤ 255, troisième ≤ 65535). Si le tag existe déjà, ses fichiers sont remplacés.
-
 ## Mises à jour
 
 **Paramètres → Mise à jour** compare ta version avec la dernière « Release » du dépôt (`rc9b8hcntp-svg/mydevoirs`).
