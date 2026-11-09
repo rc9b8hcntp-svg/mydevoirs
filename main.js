@@ -83,6 +83,8 @@ function createWindow(startHidden) {
     },
   });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
 
   // Fermer la fenêtre avec l'option « rester en arrière-plan » : on laisse la fenêtre se fermer vraiment
   // (l'appli reste active dans la zone de notification). Ainsi, quand on la rouvre, c'est une nouvelle
@@ -271,6 +273,38 @@ ipcMain.handle('backup:apply', (_e, current, options) => {
 });
 
 ipcMain.handle('backup:cancel', () => { pendingImport = null; return true; });
+
+// ---------- Fichiers joints et liens ----------
+// Types de fichiers qu'on refuse d'ouvrir depuis l'appli (un fichier de données importé pourrait y pointer)
+const UNSAFE_EXT = new Set([
+  '.exe', '.com', '.bat', '.cmd', '.msi', '.msp', '.scr', '.pif', '.cpl', '.dll', '.sys', '.lnk', '.url', '.reg', '.inf',
+  '.ps1', '.psm1', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh', '.hta', '.jar', '.appx', '.msix', '.application', '.scf', '.gadget',
+]);
+
+ipcMain.handle('file:pick', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender) || undefined;
+  const r = await dialog.showOpenDialog(win, { title: 'Joindre un fichier', properties: ['openFile', 'multiSelections'] });
+  if (r.canceled) return [];
+  return r.filePaths.slice(0, 10).map((p) => ({ path: p, name: path.basename(p) }));
+});
+
+ipcMain.handle('file:open', async (_e, filePath) => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return { ok: false, reason: 'invalid' };
+  if (UNSAFE_EXT.has(path.extname(filePath).toLowerCase())) return { ok: false, reason: 'unsafe' };
+  let st;
+  try { st = fs.statSync(filePath); } catch (err) { return { ok: false, reason: 'missing' }; }
+  if (!st.isFile()) return { ok: false, reason: 'invalid' };
+  const failure = await shell.openPath(filePath);
+  return failure ? { ok: false, reason: 'error' } : { ok: true };
+});
+
+ipcMain.handle('link:open', (_e, url) => {
+  try {
+    const u = new URL(String(url));
+    if (u.protocol === 'http:' || u.protocol === 'https:') { shell.openExternal(u.href); return true; }
+  } catch (err) { /* lien invalide */ }
+  return false;
+});
 
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('update:check', async (_e, repo, tag) => {

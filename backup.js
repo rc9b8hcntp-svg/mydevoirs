@@ -24,6 +24,40 @@ const key = (s) => String(s || '').trim().toLowerCase();
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 // ---------- Nettoyage (le fichier vient de l'extérieur : on ne lui fait pas confiance) ----------
+const KINDS = ['controle', 'expose'];
+const REPEATS = ['daily', 'weekly', 'monthly'];
+
+function sanitizeTags(list) {
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach((t) => {
+    const name = str(t, 30).replace(/^#+/, '').trim();
+    if (name && out.length < 10 && !out.some((x) => key(x) === key(name))) out.push(name);
+  });
+  return out;
+}
+
+function sanitizeSubtasks(list) {
+  const out = [];
+  (Array.isArray(list) ? list : []).slice(0, 50).forEach((s) => {
+    if (!s || typeof s !== 'object') return;
+    const text = str(s.text, 200);
+    if (text) out.push({ id: str(s.id, 64) || uid(), text, done: !!s.done });
+  });
+  return out;
+}
+
+// Fichiers joints : simples liens vers un fichier de l'ordinateur (le chemin n'est utile que sur la même machine)
+function sanitizeAttachments(list) {
+  const out = [];
+  (Array.isArray(list) ? list : []).slice(0, 10).forEach((a) => {
+    if (!a || typeof a !== 'object') return;
+    const path = str(a.path, 1000);
+    const name = str(a.name, 200);
+    if (path && name) out.push({ name, path });
+  });
+  return out;
+}
+
 function sanitizeHomework(list) {
   const out = [];
   const ids = new Set();
@@ -35,17 +69,32 @@ function sanitizeHomework(list) {
     if (!id || ids.has(id)) id = uid();
     ids.add(id);
     const p = Number(h.priority);
-    out.push({
+    const date = typeof h.date === 'string' && DATE.test(h.date) ? h.date : '';
+    const item = {
       id,
       title,
       subject: str(h.subject, 60),
-      date: typeof h.date === 'string' && DATE.test(h.date) ? h.date : '',
+      date,
       notes: str(h.notes, 5000),
       priority: p === 2 || p === 3 ? p : 1,
       done: !!h.done,
       doneAt: h.done ? num(h.doneAt) : null,
       created: num(h.created) || Date.now(),
-    });
+    };
+    // Champs ajoutés plus tard : on ne les écrit que s'ils sont utilisés (fichiers plus légers, anciens fichiers inchangés)
+    if (KINDS.includes(h.kind)) item.kind = h.kind;
+    const minutes = Math.round(Number(h.minutes));
+    if (minutes > 0) item.minutes = Math.min(minutes, 1440);
+    if (date && REPEATS.includes(h.repeat)) item.repeat = h.repeat;
+    const spawned = str(h.spawned, 64);
+    if (spawned) item.spawned = spawned;
+    const tags = sanitizeTags(h.tags);
+    if (tags.length) item.tags = tags;
+    const subtasks = sanitizeSubtasks(h.subtasks);
+    if (subtasks.length) item.subtasks = subtasks;
+    const attachments = sanitizeAttachments(h.attachments);
+    if (attachments.length) item.attachments = attachments;
+    out.push(item);
   });
   return out;
 }

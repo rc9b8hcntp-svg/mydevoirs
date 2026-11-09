@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('devoirsAPI', {
   pickBackup: () => ipcRenderer.invoke('backup:pick'),
   applyBackup: (current, options) => ipcRenderer.invoke('backup:apply', current, options),
   cancelBackup: () => ipcRenderer.invoke('backup:cancel'),
+  pickFiles: () => ipcRenderer.invoke('file:pick'),
+  openFile: (filePath) => ipcRenderer.invoke('file:open', filePath),
+  openLink: (url) => ipcRenderer.invoke('link:open', url),
   // Appelé quand l'utilisateur clique sur une notification (reçoit le filtre à afficher)
   onNotificationOpen: (cb) => ipcRenderer.on('notif:open', (_e, filter) => cb(filter)),
 });

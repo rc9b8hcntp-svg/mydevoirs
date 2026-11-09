@@ -2,6 +2,8 @@
 
 // ---------- Constantes ----------
 const PRIORITY_LABELS = { 1: 'Normale', 2: 'Importante', 3: 'Urgente' };
+const KINDS = { controle: { label: 'Contrôle', emoji: '📝' }, expose: { label: 'Exposé', emoji: '🎤' } }; // vide = simple devoir
+const REPEATS = { daily: 'Chaque jour', weekly: 'Chaque semaine', monthly: 'Chaque mois' };
 const FILTER_LABELS = { todo: 'À faire', late: 'En retard', week: 'Cette semaine', done: 'Terminés', all: 'Tous les devoirs' };
 const NEUTRAL = '#8b93a7';
 const DEFAULT_UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
@@ -78,6 +80,9 @@ const ICONS = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  paperclip: '<path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 1 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -147,6 +152,29 @@ function isThisWeek(h) {
   return n >= 0 && n <= 7;
 }
 
+function fmtMinutes(m) {
+  m = Math.round(m);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`;
+}
+
+// Prochaine date d'un devoir qui se répète (toujours aujourd'hui ou plus tard)
+function nextOccurrence(h) {
+  const step = (str) => {
+    const d = parseDate(str);
+    if (h.repeat === 'daily') return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1));
+    if (h.repeat === 'weekly') return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7));
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 2, 0).getDate(); // dernier jour du mois suivant
+    return ymd(new Date(d.getFullYear(), d.getMonth() + 1, Math.min(d.getDate(), lastDay)));
+  };
+  let next = step(h.date);
+  const today = todayStr();
+  for (let i = 0; next < today && i < 1000; i++) next = step(next);
+  return next;
+}
+
 function el(tag, className, text) {
   const e = document.createElement(tag);
   if (className) e.className = className;
@@ -191,6 +219,215 @@ function persist() {
 window.addEventListener('beforeunload', () => {
   if (saveTimer) { clearTimeout(saveTimer); saveNow(); }
 });
+
+// ---------- Messages et « Annuler » ----------
+let toastTimer = null;
+function showToast(text, actionLabel, action) {
+  const t = $('toast');
+  $('toast-text').textContent = text;
+  const b = $('toast-btn');
+  b.hidden = !actionLabel;
+  b.textContent = actionLabel || '';
+  b.onclick = actionLabel ? () => { hideToast(); action(); } : null;
+  try { if (t.matches(':popover-open')) t.hidePopover(); t.showPopover(); } catch (e) { /* popover indisponible */ }
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, actionLabel ? 8000 : 4500);
+}
+function hideToast() {
+  clearTimeout(toastTimer);
+  try { $('toast').hidePopover(); } catch (e) { /* déjà fermé */ }
+}
+
+const undoStack = [];
+function pushUndo(text, fn) {
+  const entry = { fn };
+  undoStack.push(entry);
+  if (undoStack.length > 30) undoStack.shift();
+  showToast(text, 'Annuler', () => runUndo(entry));
+}
+function runUndo(entry) {
+  const i = undoStack.indexOf(entry);
+  if (i === -1) return false;
+  undoStack.splice(i, 1);
+  entry.fn();
+  persist();
+  render();
+  return true;
+}
+function undoLast() {
+  const entry = undoStack[undoStack.length - 1];
+  if (!entry) return false;
+  hideToast();
+  return runUndo(entry);
+}
+
+function deleteItems(items, text) {
+  const ids = new Set(items.map((h) => h.id));
+  state.homework = state.homework.filter((h) => !ids.has(h.id));
+  persist();
+  render();
+  pushUndo(text, () => { state.homework.push(...items); });
+}
+
+// ---------- Terminé / pas terminé (avec les devoirs qui se répètent) ----------
+function cloneForRepeat(h, date) {
+  return {
+    id: uid(), title: h.title, subject: h.subject || '', date, notes: h.notes || '', priority: h.priority || 1,
+    done: false, created: Date.now(), kind: h.kind || '', minutes: h.minutes || 0, repeat: h.repeat,
+    tags: [...(h.tags || [])],
+    subtasks: (h.subtasks || []).map((s) => ({ id: uid(), text: s.text, done: false })),
+    attachments: (h.attachments || []).map((a) => ({ ...a })),
+  };
+}
+
+function setDone(h, done) {
+  h.done = done;
+  h.doneAt = done ? Date.now() : null;
+  if (done && h.repeat && h.date) {
+    if (!(h.spawned && state.homework.some((x) => x.id === h.spawned))) {
+      const n = cloneForRepeat(h, nextOccurrence(h));
+      state.homework.push(n);
+      h.spawned = n.id;
+      showToast(`Prochain devoir créé pour le ${formatDate(n.date)}`);
+    }
+  } else if (!done && h.spawned) {
+    const n = state.homework.find((x) => x.id === h.spawned);
+    if (n && !n.done) state.homework = state.homework.filter((x) => x !== n);
+    delete h.spawned;
+  }
+}
+
+// ---------- Éléments communs à la liste et au détail ----------
+const URL_RE = /https?:\/\/[^\s<>"']+/g;
+
+// Texte avec liens cliquables (ouverts dans le navigateur, jamais dans l'appli)
+function linkify(text, container) {
+  let last = 0;
+  let m;
+  URL_RE.lastIndex = 0;
+  while ((m = URL_RE.exec(text))) {
+    let url = m[0];
+    const trail = /[.,;:!?)\]]+$/.exec(url);
+    if (trail) url = url.slice(0, -trail[0].length);
+    if (m.index > last) container.append(text.slice(last, m.index));
+    const a = el('a', 'ext-link', url);
+    a.setAttribute('role', 'link');
+    a.tabIndex = 0;
+    a.title = 'Ouvrir le lien';
+    const open = (e) => { e.preventDefault(); e.stopPropagation(); window.devoirsAPI.openLink(url); };
+    a.addEventListener('click', open);
+    a.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
+    container.append(a);
+    last = m.index + url.length;
+    URL_RE.lastIndex = last;
+  }
+  if (last < text.length) container.append(text.slice(last));
+  return container;
+}
+
+function subProgress(h) {
+  const subs = h.subtasks || [];
+  return `${subs.filter((s) => s.done).length}/${subs.length}`;
+}
+
+function searchTag(tag) {
+  if ($('viewDialog').open) $('viewDialog').close();
+  $('search').value = '#' + tag;
+  state.search = '#' + tag;
+  renderView();
+}
+
+function buildMeta(h, opts) {
+  const meta = el('div', 'meta');
+  const k = KINDS[h.kind];
+  if (k) meta.append(el('span', 'tag kind', `${k.emoji} ${k.label}`));
+  if (h.subject) {
+    const t = el('span', 'tag subject');
+    t.style.setProperty('--c', subjectColor(h.subject));
+    t.append(el('span', 'dot'), h.subject);
+    meta.append(t);
+  }
+  if (h.date) {
+    const due = opts.due && !h.done ? dueLabel(h.date) : { text: formatDate(h.date), cls: '' };
+    const tag = el('span', 'tag ' + due.cls);
+    tag.append(mkIcon('calendar'), due.text);
+    meta.append(tag);
+  }
+  if (h.priority > 1) meta.append(el('span', 'tag p' + h.priority, PRIORITY_LABELS[h.priority]));
+  if (h.minutes) {
+    const t = el('span', 'tag');
+    t.append(mkIcon('clock'), fmtMinutes(h.minutes));
+    t.title = 'Durée estimée';
+    meta.append(t);
+  }
+  if ((h.subtasks || []).length) {
+    const t = el('span', 'tag sub-progress');
+    t.dataset.id = h.id;
+    t.append(mkIcon('check'), subProgress(h));
+    t.title = 'Sous-tâches terminées';
+    meta.append(t);
+  }
+  if (h.repeat && REPEATS[h.repeat]) {
+    const t = el('span', 'tag');
+    t.append(mkIcon('repeat'), REPEATS[h.repeat]);
+    meta.append(t);
+  }
+  (h.tags || []).forEach((name) => {
+    const b = button('tag hash', '#' + name);
+    b.title = 'Voir les devoirs avec cette étiquette';
+    b.addEventListener('click', (e) => { e.stopPropagation(); searchTag(name); });
+    meta.append(b);
+  });
+  return meta;
+}
+
+function buildSubtasks(h) {
+  const subs = h.subtasks || [];
+  if (!subs.length) return null;
+  const ul = el('ul', 'subs');
+  subs.forEach((s) => {
+    const li = el('li', s.done ? 'done' : '');
+    const label = el('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'check sm';
+    cb.checked = !!s.done;
+    cb.addEventListener('change', () => {
+      s.done = cb.checked;
+      li.classList.toggle('done', s.done);
+      document.querySelectorAll(`.sub-progress[data-id="${h.id}"]`).forEach((t) => { t.lastChild.textContent = subProgress(h); });
+      persist();
+    });
+    label.append(cb, el('span', null, s.text));
+    li.append(label);
+    ul.append(li);
+  });
+  return ul;
+}
+
+async function openAttachment(f) {
+  const r = await window.devoirsAPI.openFile(f.path);
+  if (r && r.ok) return;
+  const why = {
+    missing: `Fichier introuvable : ${f.name}`,
+    unsafe: "Ce type de fichier ne peut pas être ouvert depuis l'application.",
+  };
+  showToast((r && why[r.reason]) || `Impossible d'ouvrir ${f.name}`);
+}
+
+function buildFiles(h) {
+  const files = h.attachments || [];
+  if (!files.length) return null;
+  const box = el('div', 'files');
+  files.forEach((f) => {
+    const b = button('file-chip');
+    b.append(mkIcon('paperclip'), el('span', null, f.name));
+    b.title = f.path;
+    b.addEventListener('click', (e) => { e.stopPropagation(); openAttachment(f); });
+    box.append(b);
+  });
+  return box;
+}
 
 // ---------- Matières ----------
 function sameName(a, b) {
@@ -290,11 +527,17 @@ function renderPalette(container, selected, onPick) {
 }
 
 // ---------- Filtrage ----------
+function searchText(h) {
+  const k = KINDS[h.kind];
+  return [h.title, h.subject, h.notes, k && k.label, ...(h.tags || []).map((t) => '#' + t), ...(h.subtasks || []).map((s) => s.text)]
+    .filter(Boolean).join(' ').toLowerCase();
+}
+
 function visibleItems() {
   const q = state.search.trim().toLowerCase();
   const items = state.homework.filter((h) => {
     if (state.subject !== null && !sameName(h.subject, state.subject)) return false;
-    if (q && !(`${h.title} ${h.subject || ''} ${h.notes || ''}`.toLowerCase().includes(q))) return false;
+    if (q && !searchText(h).includes(q)) return false;
     switch (state.filter) {
       case 'todo': return !h.done;
       case 'late': return isLate(h);
@@ -343,6 +586,8 @@ function renderCounts() {
     s2.style.color = 'var(--danger)';
     stats.append(s2, ' en retard');
   }
+  const mins = hw.reduce((sum, h) => sum + (h.done ? 0 : (h.minutes || 0)), 0);
+  if (mins > 0) stats.append(` · ≈ ${fmtMinutes(mins)} de travail`);
 
   let title = FILTER_LABELS[state.filter];
   if (state.subject !== null) title += ' · ' + state.subject;
@@ -409,31 +654,19 @@ function renderList() {
     cb.checked = !!h.done;
     cb.setAttribute('aria-label', 'Marquer comme terminé');
     cb.addEventListener('change', () => {
-      h.done = cb.checked;
-      h.doneAt = cb.checked ? Date.now() : null;
+      setDone(h, cb.checked);
       persist();
       render();
     });
 
     const body = el('div', 'body');
     body.append(el('div', 'title', h.title));
-    if (h.notes) body.append(el('div', 'notes', h.notes));
-
-    const meta = el('div', 'meta');
-    if (h.subject) {
-      const t = el('span', 'tag subject');
-      t.style.setProperty('--c', color);
-      t.append(el('span', 'dot'), h.subject);
-      meta.append(t);
-    }
-    if (h.date) {
-      const due = h.done ? { text: formatDate(h.date), cls: '' } : dueLabel(h.date);
-      const tag = el('span', 'tag ' + due.cls);
-      tag.append(mkIcon('calendar'), due.text);
-      meta.append(tag);
-    }
-    if (h.priority > 1) meta.append(el('span', 'tag p' + h.priority, PRIORITY_LABELS[h.priority]));
-    body.append(meta);
+    if (h.notes) body.append(linkify(h.notes, el('div', 'notes')));
+    const subs = buildSubtasks(h);
+    if (subs) body.append(subs);
+    body.append(buildMeta(h, { due: true }));
+    const files = buildFiles(h);
+    if (files) body.append(files);
 
     const btns = el('div', 'btns');
     const edit = button(null);
@@ -446,13 +679,14 @@ function renderList() {
     del.title = 'Supprimer';
     del.setAttribute('aria-label', 'Supprimer');
     del.addEventListener('click', () => {
-      if (!state.settings.confirmDelete || confirm(`Supprimer « ${h.title} » ?`)) {
-        state.homework = state.homework.filter((x) => x.id !== h.id);
-        persist();
-        render();
-      }
+      if (!state.settings.confirmDelete || confirm(`Supprimer « ${h.title} » ?`)) deleteItems([h], 'Devoir supprimé');
     });
-    btns.append(edit, del);
+    const dup = button(null);
+    dup.append(mkIcon('copy'));
+    dup.title = 'Dupliquer';
+    dup.setAttribute('aria-label', 'Dupliquer');
+    dup.addEventListener('click', () => openDialog(null, undefined, h));
+    btns.append(dup, edit, del);
 
     li.append(cb, body, btns);
     list.append(li);
@@ -479,8 +713,7 @@ function openView(id) {
   cb.setAttribute('aria-label', 'Marquer comme terminé');
   const title = el('span', 'v-title' + (h.done ? ' done' : ''), h.title);
   cb.addEventListener('change', () => {
-    h.done = cb.checked;
-    h.doneAt = cb.checked ? Date.now() : null;
+    setDone(h, cb.checked);
     title.classList.toggle('done', h.done);
     persist();
     render();
@@ -488,21 +721,12 @@ function openView(id) {
   top.append(cb, title);
   box.append(top);
 
-  const meta = el('div', 'meta');
-  if (h.subject) {
-    const t = el('span', 'tag subject');
-    t.style.setProperty('--c', color);
-    t.append(el('span', 'dot'), h.subject);
-    meta.append(t);
-  }
-  if (h.date) {
-    const tag = el('span', 'tag');
-    tag.append(mkIcon('calendar'), formatDate(h.date));
-    meta.append(tag);
-  }
-  if (h.priority > 1) meta.append(el('span', 'tag p' + h.priority, PRIORITY_LABELS[h.priority]));
-  if (meta.children.length) box.append(meta);
-  if (h.notes) box.append(el('div', 'v-notes', h.notes));
+  box.append(buildMeta(h, { due: false }));
+  if (h.notes) box.append(linkify(h.notes, el('div', 'v-notes')));
+  const subs = buildSubtasks(h);
+  if (subs) box.append(subs);
+  const files = buildFiles(h);
+  if (files) box.append(files);
 
   if (!$('viewDialog').open) $('viewDialog').showModal();
   cb.focus(); // Espace coche / décoche
@@ -510,6 +734,11 @@ function openView(id) {
 
 $('vClose').addEventListener('click', () => $('viewDialog').close());
 $('vCancel').addEventListener('click', () => $('viewDialog').close());
+$('vDup').addEventListener('click', () => {
+  const h = state.homework.find((x) => x.id === viewingId);
+  $('viewDialog').close();
+  if (h) openDialog(null, undefined, h);
+});
 $('vEdit').addEventListener('click', () => {
   const id = viewingId;
   $('viewDialog').close();
@@ -537,6 +766,17 @@ function calTitleText() {
   if (s.getFullYear() !== e.getFullYear()) return `${s.getDate()} ${mon(s, 'short')} ${s.getFullYear()} – ${e.getDate()} ${mon(e, 'short')} ${e.getFullYear()}`;
   if (s.getMonth() !== e.getMonth()) return `${s.getDate()} ${mon(s, 'short')} – ${e.getDate()} ${mon(e, 'short')} ${e.getFullYear()}`;
   return `${s.getDate()} – ${e.getDate()} ${mon(e, 'long')} ${e.getFullYear()}`;
+}
+
+let dragId = null;
+function moveHomework(id, date) {
+  const h = state.homework.find((x) => x.id === id);
+  if (!h || h.date === date) return;
+  const old = h.date;
+  h.date = date;
+  persist();
+  render();
+  pushUndo(`« ${h.title} » déplacé au ${formatDate(date)}`, () => { h.date = old; });
 }
 
 function renderCalendar() {
@@ -615,19 +855,52 @@ function renderCalendar() {
     (byDay.get(key) || []).forEach((h) => {
       const cls = 'cal-chip' + (h.done ? ' done' : '') + (isLate(h) ? ' late' : '');
       const chip = button(cls);
+      const ke = KINDS[h.kind] ? KINDS[h.kind].emoji + ' ' : '';
       if (week) {
         if (h.subject) chip.append(el('span', 'cs', h.subject));
-        chip.append(el('span', 'ct', h.title));
+        chip.append(el('span', 'ct', ke + h.title));
         if (h.priority > 1) chip.append(el('span', 'cp p' + h.priority, PRIORITY_LABELS[h.priority]));
       } else {
-        chip.textContent = (h.subject ? h.subject + ' · ' : '') + h.title;
+        chip.textContent = ke + (h.subject ? h.subject + ' · ' : '') + h.title;
       }
       chip.style.setProperty('--c', subjectColor(h.subject));
       chip.title = h.title + (h.notes ? '\n' + h.notes : '');
       chip.addEventListener('click', (e) => { e.stopPropagation(); openView(h.id); });
+      // Glisser le devoir vers un autre jour pour changer sa date
+      chip.draggable = true;
+      chip.addEventListener('dragstart', (e) => {
+        dragId = h.id;
+        e.dataTransfer.setData('text/plain', h.id);
+        e.dataTransfer.effectAllowed = 'move';
+        chip.classList.add('dragging');
+      });
+      chip.addEventListener('dragend', () => {
+        dragId = null;
+        chip.classList.remove('dragging');
+        document.querySelectorAll('.cal-day.drop').forEach((c) => c.classList.remove('drop'));
+      });
       box.append(chip);
     });
     cell.append(box);
+    const mins = (byDay.get(key) || []).reduce((sum, h) => sum + (h.done ? 0 : (h.minutes || 0)), 0);
+    if (mins > 0) {
+      const tot = el('span', 'cal-total', fmtMinutes(mins));
+      tot.title = 'Temps de travail estimé ce jour-là';
+      cell.append(tot);
+    }
+    cell.addEventListener('dragover', (e) => {
+      if (!dragId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      cell.classList.add('drop');
+    });
+    cell.addEventListener('dragleave', (e) => { if (!cell.contains(e.relatedTarget)) cell.classList.remove('drop'); });
+    cell.addEventListener('drop', (e) => {
+      e.preventDefault();
+      cell.classList.remove('drop');
+      if (dragId) moveHomework(dragId, key);
+      dragId = null;
+    });
     cell.addEventListener('click', () => openDialog(null, key));
     grid.append(cell);
   }
@@ -775,15 +1048,126 @@ function setPriority(value) {
   });
 }
 
-function openDialog(id, presetDate) {
+let pickedKind = '';
+let formSubs = [];
+let formTags = [];
+let formFiles = [];
+
+function setKind(value) {
+  pickedKind = KINDS[value] ? value : '';
+  document.querySelectorAll('#f-kind button').forEach((b) => {
+    const on = b.dataset.value === pickedKind;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+}
+
+// La répétition a besoin d'une date
+function updateRepeatField() {
+  const has = !!$('f-date').value;
+  $('f-repeat').disabled = !has;
+  if (!has) $('f-repeat').value = '';
+  $('f-repeat-hint').textContent = !has ? "Choisis d'abord une date."
+    : $('f-repeat').value ? 'Quand tu le coches, le prochain est créé automatiquement.' : '';
+}
+
+function renderFormSubs() {
+  const ul = $('f-subs');
+  ul.textContent = '';
+  formSubs.forEach((s, i) => {
+    const li = el('li');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'check sm';
+    cb.checked = !!s.done;
+    cb.setAttribute('aria-label', 'Étape terminée');
+    cb.addEventListener('change', () => { s.done = cb.checked; });
+    const del = button('mini-del');
+    del.append(mkIcon('x'));
+    del.title = 'Retirer';
+    del.setAttribute('aria-label', 'Retirer cette étape');
+    del.addEventListener('click', () => { formSubs.splice(i, 1); renderFormSubs(); });
+    li.append(cb, el('span', 'grow', s.text), del);
+    ul.append(li);
+  });
+}
+
+function addFormSub() {
+  const text = $('f-sub-input').value.trim();
+  if (!text || formSubs.length >= 30) return;
+  formSubs.push({ id: uid(), text, done: false });
+  $('f-sub-input').value = '';
+  renderFormSubs();
+}
+
+function renderFormTags() {
+  const box = $('f-tags');
+  box.textContent = '';
+  formTags.forEach((name, i) => {
+    const b = button('chip on');
+    b.style.setProperty('--c', 'var(--accent)');
+    b.append('#' + name, mkIcon('x'));
+    b.title = 'Retirer cette étiquette';
+    b.addEventListener('click', () => { formTags.splice(i, 1); renderFormTags(); });
+    box.append(b);
+  });
+}
+
+function addFormTags(raw) {
+  String(raw || '').split(/[,;]/).forEach((t) => {
+    const name = t.replace(/^#+/, '').trim().slice(0, 30);
+    if (name && formTags.length < 10 && !formTags.some((x) => sameName(x, name))) formTags.push(name);
+  });
+  renderFormTags();
+}
+
+function renderFormFiles() {
+  const ul = $('f-files');
+  ul.textContent = '';
+  formFiles.forEach((f, i) => {
+    const li = el('li');
+    li.append(mkIcon('paperclip'));
+    const name = el('span', 'grow', f.name);
+    name.title = f.path;
+    const del = button('mini-del');
+    del.append(mkIcon('x'));
+    del.title = 'Retirer';
+    del.setAttribute('aria-label', 'Retirer ce fichier');
+    del.addEventListener('click', () => { formFiles.splice(i, 1); renderFormFiles(); });
+    li.append(name, del);
+    ul.append(li);
+  });
+  $('f-file-add').hidden = formFiles.length >= 10;
+}
+
+// id : devoir à modifier — template : devoir à copier (nouveau devoir prérempli)
+function openDialog(id, presetDate, template) {
   state.editingId = id || null;
   const h = id ? state.homework.find((x) => x.id === id) : null;
-  $('dialogTitle').textContent = h ? 'Modifier le devoir' : 'Nouveau devoir';
-  $('f-title').value = h ? h.title : '';
-  $('f-date').value = h ? h.date || '' : (presetDate || '');
-  $('f-notes').value = h ? h.notes || '' : '';
-  setPriority(h ? (h.priority || 1) : (state.settings.defaultPriority || 1));
-  pickedSubject = h ? h.subject || '' : (state.subject || '');
+  const src = h || template || null;
+  const copy = !h && !!template;
+  $('dialogTitle').textContent = h ? 'Modifier le devoir' : copy ? 'Dupliquer le devoir' : 'Nouveau devoir';
+  $('f-title').value = src ? src.title : '';
+  $('f-date').value = src ? src.date || '' : (presetDate || '');
+  $('f-notes').value = src ? src.notes || '' : '';
+  $('f-minutes').value = src && src.minutes ? src.minutes : '';
+  $('f-repeat').value = src && src.repeat ? src.repeat : '';
+  setKind(src ? src.kind : '');
+  setPriority(src ? (src.priority || 1) : (state.settings.defaultPriority || 1));
+  pickedSubject = src ? src.subject || '' : (state.subject || '');
+  formSubs = ((src && src.subtasks) || []).map((s) => ({ id: copy ? uid() : s.id, text: s.text, done: copy ? false : !!s.done }));
+  formTags = [...((src && src.tags) || [])];
+  formFiles = ((src && src.attachments) || []).map((a) => ({ ...a }));
+  $('f-sub-input').value = '';
+  $('f-tag-input').value = '';
+  const known = new Set();
+  state.homework.forEach((x) => (x.tags || []).forEach((t) => known.add(t)));
+  $('tag-list').textContent = '';
+  [...known].sort((a, b) => a.localeCompare(b, 'fr')).forEach((t) => { const o = document.createElement('option'); o.value = t; $('tag-list').append(o); });
+  updateRepeatField();
+  renderFormSubs();
+  renderFormTags();
+  renderFormFiles();
   closeQuickAdd();
   renderPicker();
   $('dialog').showModal();
@@ -794,12 +1178,21 @@ $('form').addEventListener('submit', (e) => {
   e.preventDefault();
   const title = $('f-title').value.trim();
   if (!title) return;
+  addFormSub(); // ce qui est tapé mais pas encore ajouté
+  addFormTags($('f-tag-input').value);
+  const date = $('f-date').value;
   const data = {
     title,
     subject: pickedSubject,
-    date: $('f-date').value,
+    date,
     priority: Number(pickedPriority) || 1,
     notes: $('f-notes').value.trim(),
+    kind: pickedKind,
+    minutes: Math.max(0, Math.min(1440, Math.round(Number($('f-minutes').value) || 0))),
+    repeat: date ? $('f-repeat').value : '',
+    tags: formTags.slice(),
+    subtasks: formSubs.map((s) => ({ ...s })),
+    attachments: formFiles.map((a) => ({ ...a })),
   };
   if (state.editingId) {
     const h = state.homework.find((x) => x.id === state.editingId);
@@ -810,6 +1203,28 @@ $('form').addEventListener('submit', (e) => {
   persist();
   $('dialog').close();
   render();
+});
+
+$('f-kind').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-value]');
+  if (b) setKind(b.dataset.value);
+});
+$('f-date').addEventListener('input', updateRepeatField);
+$('f-repeat').addEventListener('change', updateRepeatField);
+$('f-sub-add').addEventListener('click', addFormSub);
+$('f-sub-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addFormSub(); } });
+$('f-tag-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addFormTags($('f-tag-input').value); $('f-tag-input').value = ''; }
+});
+$('f-tag-input').addEventListener('input', (e) => {
+  if (e.inputType === 'insertReplacementText') { addFormTags($('f-tag-input').value); $('f-tag-input').value = ''; } // choix dans la liste
+});
+$('f-file-add').addEventListener('click', async () => {
+  const picked = await window.devoirsAPI.pickFiles();
+  (picked || []).forEach((f) => {
+    if (formFiles.length < 10 && !formFiles.some((x) => x.path === f.path)) formFiles.push(f);
+  });
+  renderFormFiles();
 });
 
 $('cancelBtn').addEventListener('click', () => $('dialog').close());
@@ -1437,9 +1852,7 @@ $('clearDone').addEventListener('click', () => {
   const n = state.homework.filter((h) => h.done).length;
   if (n === 0) { alert('Aucun devoir terminé à supprimer.'); return; }
   if (confirm(`Supprimer les ${n} devoir${n > 1 ? 's' : ''} terminé${n > 1 ? 's' : ''} ?`)) {
-    state.homework = state.homework.filter((h) => !h.done);
-    persist();
-    render();
+    deleteItems(state.homework.filter((h) => h.done), `${n} devoir${n > 1 ? 's' : ''} supprimé${n > 1 ? 's' : ''}`);
   }
 });
 
@@ -1451,6 +1864,7 @@ const SHORTCUTS = [
     ['Échap', 'Fermer la fenêtre ouverte, vider la recherche'],
     ['Ctrl+,', 'Paramètres'],
     ['Ctrl+Maj+D', 'Changer de thème'],
+    ['Ctrl+Z', 'Annuler la dernière suppression ou le dernier déplacement'],
     ['F1|?', 'Afficher cette aide'],
   ]],
   ['Navigation', [
@@ -1471,6 +1885,7 @@ const SHORTCUTS = [
   ["Détail d'un devoir (calendrier)", [
     ['Espace', 'Cocher / décocher'],
     ['E', 'Modifier'],
+    ['D', 'Dupliquer'],
   ]],
 ];
 
@@ -1513,6 +1928,7 @@ document.addEventListener('keydown', (e) => {
   if (openDlg) {
     if (openDlg.id === 'dialog' && mod && e.key === 'Enter') { e.preventDefault(); $('form').requestSubmit(); }
     else if (openDlg.id === 'viewDialog' && !mod && !e.shiftKey && key === 'e' && !isTyping(e.target)) { e.preventDefault(); $('vEdit').click(); }
+    else if (openDlg.id === 'viewDialog' && !mod && !e.shiftKey && key === 'd' && !isTyping(e.target)) { e.preventDefault(); $('vDup').click(); }
     return;
   }
 
@@ -1521,6 +1937,7 @@ document.addEventListener('keydown', (e) => {
     else if (key === 'f' && !e.shiftKey) { e.preventDefault(); $('search').focus(); $('search').select(); }
     else if (e.key === ',' || e.code === 'Comma') { e.preventDefault(); openSettings('appearance'); }
     else if (key === 'd' && e.shiftKey) { e.preventDefault(); $('themeBtn').click(); }
+    else if (key === 'z' && !e.shiftKey && !isTyping(e.target)) { if (undoLast()) e.preventDefault(); }
     return;
   }
 

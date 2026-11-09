@@ -107,6 +107,15 @@
       </label>
 
       <div class="field">
+        <span class="flabel">Type</span>
+        <div class="seg" id="f-kind" role="radiogroup" aria-label="Type">
+          <button type="button" data-value="">Devoir</button>
+          <button type="button" data-value="controle">📝 Contrôle</button>
+          <button type="button" data-value="expose">🎤 Exposé</button>
+        </div>
+      </div>
+
+      <div class="field">
         <span class="flabel">Matière</span>
         <div id="f-subjects" class="chips"></div>
 
@@ -138,10 +147,49 @@
         </div>
       </div>
 
+      <div class="row">
+        <label class="field">
+          <span class="flabel">Durée estimée</span>
+          <span class="unit-input"><input type="number" id="f-minutes" min="0" max="1440" step="5" inputmode="numeric" placeholder="0"><span>min</span></span>
+        </label>
+        <label class="field">
+          <span class="flabel">Répétition</span>
+          <select id="f-repeat" aria-describedby="f-repeat-hint">
+            <option value="">Aucune</option>
+            <option value="daily">Chaque jour</option>
+            <option value="weekly">Chaque semaine</option>
+            <option value="monthly">Chaque mois</option>
+          </select>
+          <span class="hint" id="f-repeat-hint">Choisis d'abord une date.</span>
+        </label>
+      </div>
+
       <label class="field">
         <span class="flabel">Notes</span>
-        <textarea id="f-notes" rows="3" maxlength="1000" placeholder="Détails, pages, consignes…"></textarea>
+        <textarea id="f-notes" rows="3" maxlength="1000" placeholder="Détails, pages, consignes… (les liens https:// sont cliquables)"></textarea>
       </label>
+
+      <div class="field">
+        <span class="flabel">Sous-tâches</span>
+        <ul id="f-subs" class="subs-edit"></ul>
+        <div class="adder">
+          <input type="text" id="f-sub-input" maxlength="200" placeholder="Ajouter une étape (Entrée)">
+          <button type="button" class="ghost small" id="f-sub-add">Ajouter</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Étiquettes</span>
+        <div id="f-tags" class="chips"></div>
+        <input type="text" id="f-tag-input" list="tag-list" maxlength="30" placeholder="Ex : groupe, à rendre… (Entrée pour ajouter)">
+        <datalist id="tag-list"></datalist>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Fichiers joints</span>
+        <ul id="f-files" class="files-edit"></ul>
+        <button type="button" class="ghost small attach" id="f-file-add"><span class="ico" data-icon="paperclip"></span>Joindre un fichier</button>
+      </div>
 
       <div class="actions">
         <button type="button" class="ghost" id="cancelBtn">Annuler</button>
@@ -159,6 +207,7 @@
     <div id="vBody" class="v-body"></div>
     <div class="actions">
       <button type="button" class="ghost" id="vCancel">Fermer</button>
+      <button type="button" class="ghost" id="vDup"><span class="ico" data-icon="copy"></span>Dupliquer</button>
       <button type="button" class="primary" id="vEdit"><span class="ico" data-icon="edit"></span>Modifier</button>
     </div>
   </dialog>
@@ -416,6 +465,11 @@
     </div>
   </dialog>
 
+  <!-- Message bref avec bouton « Annuler » -->
+  <div id="toast" class="toast" popover="manual" role="status" aria-live="polite">
+    <span id="toast-text"></span>
+    <button type="button" id="toast-btn" class="toast-btn" hidden></button>
+  </div>
   <script src="renderer.js"></script>
 </body>
 </html>
