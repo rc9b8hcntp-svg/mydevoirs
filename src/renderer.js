@@ -7,7 +7,11 @@ const REPEATS = { daily: 'Chaque jour', weekly: 'Chaque semaine', monthly: 'Chaq
 const FILTER_LABELS = { today: "Aujourd'hui et demain", todo: 'À faire', late: 'En retard', week: 'Cette semaine', done: 'Terminés', all: 'Tous les devoirs' };
 const NEUTRAL = '#8b93a7';
 const DEFAULT_UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
-const NOTIF_DEFAULTS = { enabled: true, time: '18:00', daysAhead: 1, includeLate: true, background: true, startup: false };
+const NOTIF_DEFAULTS = {
+  enabled: true, time: '18:00', daysAhead: 1, includeLate: true, background: true, startup: false,
+  dueReminder: false, dueTime: '18:00', actions: true, morning: false, morningTime: '07:30',
+  vacation: false, vacationFrom: '', vacationTo: '', sound: 'default',
+};
 
 // Anciennes couleurs automatiques (utilisées pour garder les couleurs des matières déjà créées)
 const LEGACY_PALETTE = ['#4f6bed', '#e5484d', '#22a06b', '#f59e0b', '#a855f7', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
@@ -591,6 +595,7 @@ function visibleItems() {
       case 'priority': return (b.priority - a.priority) || byDate(a, b);
       case 'subject': return (a.subject || '').localeCompare(b.subject || '', 'fr') || byDate(a, b);
       case 'created': return (b.created || 0) - (a.created || 0);
+      case 'custom': return ordOf(a) - ordOf(b);
       default: return byDate(a, b) || (b.priority - a.priority);
     }
   });
@@ -655,10 +660,18 @@ function renderSubjects() {
   });
 }
 
+let selectMode = false;
+const selected = new Set();
+let kbId = null;
+let listDragId = null;
+const ordOf = (h) => (h.order != null ? h.order : (h.created || 0));
+
 function renderList() {
   const list = $('list');
   list.textContent = '';
   const items = visibleItems();
+  list.classList.toggle('selecting', selectMode);
+  list.classList.toggle('reorder', !selectMode && state.sort === 'custom');
 
   $('empty').hidden = items.length > 0;
   if (items.length === 0) {
@@ -680,13 +693,22 @@ function renderList() {
     const color = subjectColor(h.subject);
     const li = el('li', 'item' + (h.done ? ' done' : ''));
     li.style.setProperty('--c', color);
+    li.dataset.id = h.id;
+    if (kbId === h.id) li.classList.add('kb');
+    if (selectMode && selected.has(h.id)) li.classList.add('sel');
 
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.className = 'check';
-    cb.checked = !!h.done;
+    cb.checked = selectMode ? selected.has(h.id) : !!h.done;
     cb.setAttribute('aria-label', 'Marquer comme terminé');
     cb.addEventListener('change', () => {
+      if (selectMode) {
+        if (cb.checked) selected.add(h.id); else selected.delete(h.id);
+        li.classList.toggle('sel', cb.checked);
+        renderBulk();
+        return;
+      }
       setDone(h, cb.checked);
       persist();
       render();
@@ -719,9 +741,24 @@ function renderList() {
     dup.title = 'Dupliquer';
     dup.setAttribute('aria-label', 'Dupliquer');
     dup.addEventListener('click', () => openDialog(null, undefined, h));
-    btns.append(dup, edit, del);
+    const tm = button(null);
+    tm.append(mkIcon('clock'));
+    tm.title = 'Minuteur de travail (25 min)';
+    tm.setAttribute('aria-label', 'Minuteur de travail');
+    tm.addEventListener('click', () => startTimer(h));
+    btns.append(tm, dup, edit, del);
 
     li.append(cb, body, btns);
+    if (selectMode) {
+      li.addEventListener('click', (e) => { if (!e.target.closest('a,button,input')) cb.click(); });
+    } else if (state.sort === 'custom') {
+      li.draggable = true;
+      li.addEventListener('dragstart', (e) => { listDragId = h.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', h.id); });
+      li.addEventListener('dragover', (e) => { if (listDragId) { e.preventDefault(); li.classList.add('over'); } });
+      li.addEventListener('dragleave', () => li.classList.remove('over'));
+      li.addEventListener('drop', (e) => { e.preventDefault(); li.classList.remove('over'); if (listDragId) reorderTo(listDragId, h.id); listDragId = null; });
+      li.addEventListener('dragend', () => { listDragId = null; });
+    }
     list.append(li);
   };
   if (state.filter === 'today') renderTodayGroups(items, addItem, list);
@@ -971,6 +1008,8 @@ function renderView() {
   $('calendar').hidden = !cal;
   $('list').hidden = cal;
   $('sort').hidden = cal;
+  $('selBtn').hidden = cal;
+  if (cal && selectMode) setSelectMode(false);
   document.querySelectorAll('#viewSeg button').forEach((b) => {
     const on = b.dataset.view === state.view;
     b.classList.toggle('on', on);
@@ -994,6 +1033,7 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 function resolvedTheme() {
   const t = state.settings.theme;
   if (t === 'auto') return darkQuery.matches ? 'dark' : 'light';
+  if (t === 'time') { const hr = new Date().getHours(); return hr >= 7 && hr < 19 ? 'light' : 'dark'; }
   return t === 'dark' ? 'dark' : 'light';
 }
 
@@ -1008,6 +1048,14 @@ function applyTheme() {
   const theme = resolvedTheme();
   const root = document.documentElement;
   root.dataset.theme = theme;
+  root.style.zoom = String((state.settings.fontScale || 100) / 100);
+  document.body.classList.toggle('compact', !!state.settings.compact);
+  $('s-compact').checked = !!state.settings.compact;
+  document.querySelectorAll('#fontSeg button').forEach((b) => {
+    const on = Number(b.dataset.scale) === (state.settings.fontScale || 100);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
   const accent = ACCENTS.find((a) => a.id === state.settings.accent) || ACCENTS[0];
   const color = theme === 'dark' ? accent.dark : accent.light;
   root.style.setProperty('--accent', color);
@@ -1494,6 +1542,21 @@ function fillNotifSettings() {
   $('n-startup').checked = n.startup;
   $('n-startup').disabled = !n.background;
   $('n-time').disabled = $('n-days').disabled = $('n-late').disabled = !n.enabled;
+  $('n-due').checked = n.dueReminder;
+  $('n-due-time').value = n.dueTime;
+  $('n-due-time').disabled = !n.dueReminder;
+  $('n-morning').checked = n.morning;
+  $('n-morning-time').value = n.morningTime;
+  $('n-morning-time').disabled = !n.morning;
+  $('n-actions').checked = n.actions;
+  $('n-sound').value = n.sound;
+  $('n-vac').checked = n.vacation;
+  $('n-vac-from').value = n.vacationFrom;
+  $('n-vac-to').value = n.vacationTo;
+  $('n-vac-from').disabled = $('n-vac-to').disabled = !n.vacation;
+  $('n-vac-msg').textContent = n.vacation && n.vacationFrom && n.vacationTo && n.vacationTo < n.vacationFrom
+    ? 'La fin doit être après le début : le mode vacances est inactif.'
+    : 'Dernier jour sans rappel.';
   $('n-test-msg').textContent = 'Envoie une notification pour vérifier que tout marche.';
 }
 
@@ -1514,6 +1577,15 @@ $('n-bg').addEventListener('change', (e) => {
   fillNotifSettings();
 });
 $('n-startup').addEventListener('change', (e) => setNotif('startup', e.target.checked));
+$('n-due').addEventListener('change', (e) => setNotif('dueReminder', e.target.checked));
+$('n-due-time').addEventListener('change', (e) => { if (/^\d{2}:\d{2}$/.test(e.target.value)) setNotif('dueTime', e.target.value); else fillNotifSettings(); });
+$('n-morning').addEventListener('change', (e) => setNotif('morning', e.target.checked));
+$('n-morning-time').addEventListener('change', (e) => { if (/^\d{2}:\d{2}$/.test(e.target.value)) setNotif('morningTime', e.target.value); else fillNotifSettings(); });
+$('n-actions').addEventListener('change', (e) => setNotif('actions', e.target.checked));
+$('n-sound').addEventListener('change', (e) => setNotif('sound', e.target.value));
+$('n-vac').addEventListener('change', (e) => setNotif('vacation', e.target.checked));
+$('n-vac-from').addEventListener('change', (e) => setNotif('vacationFrom', e.target.value));
+$('n-vac-to').addEventListener('change', (e) => setNotif('vacationTo', e.target.value));
 
 $('n-test').addEventListener('click', async () => {
   const msg = $('n-test-msg');
@@ -1524,6 +1596,29 @@ $('n-test').addEventListener('click', async () => {
   msg.textContent = r && r.ok
     ? 'Notification envoyée. Rien reçu ? Vérifie que les notifications de Windows ne sont pas coupées (mode « Ne pas déranger » ou assistant de concentration).'
     : "Impossible d'envoyer la notification sur cet ordinateur.";
+});
+
+// Un bouton de notification (« Marquer fait ») a modifié les devoirs pendant que la fenêtre était ouverte
+// Les devoirs qui se répètent, terminés depuis la notification, donnent leur prochain devoir ici.
+function applyPendingSpawns() {
+  let spawned = 0;
+  state.homework.slice().forEach((h) => {
+    if (!h.pendingSpawn) return;
+    delete h.pendingSpawn;
+    if (h.done && h.repeat && h.date && !(h.spawned && state.homework.some((x) => x.id === h.spawned))) {
+      const n = cloneForRepeat(h, nextOccurrence(h));
+      state.homework.push(n);
+      h.spawned = n.id;
+      spawned++;
+    }
+  });
+  return spawned;
+}
+window.devoirsAPI.onDataChanged((homework) => {
+  if (!Array.isArray(homework)) return;
+  state.homework = homework;
+  if (applyPendingSpawns()) persist();
+  render();
 });
 
 // Clic sur une notification : on ouvre la bonne liste
@@ -1596,7 +1691,7 @@ function refreshAfterImport() {
   renderSubjectManager();
   render();
 }
-const SORT_VALUES = ['date', 'priority', 'subject', 'created'];
+const SORT_VALUES = ['date', 'priority', 'subject', 'created', 'custom'];
 
 $('bx-go').addEventListener('click', async () => {
   const parts = { homework: $('bx-homework').checked, subjects: $('bx-subjects').checked, settings: $('bx-settings').checked };
@@ -2320,8 +2415,14 @@ $('pPdf').addEventListener('click', async () => {
 
 // ---------- Raccourcis clavier ----------
 const SHORTCUTS = [
+  ['Liste', [
+    ['↑|↓', 'Se déplacer dans la liste'],
+    ['Espace', 'Cocher / décocher le devoir sélectionné'],
+    ['Suppr', 'Supprimer le devoir sélectionné'],
+  ]],
   ['Général', [
     ['Ctrl+N', 'Nouveau devoir'],
+    ['Ctrl+K', 'Palette de commandes'],
     ['Ctrl+F|/', 'Rechercher'],
     ['Échap', 'Fermer la fenêtre ouverte, vider la recherche'],
     ['Ctrl+,', 'Paramètres'],
@@ -2388,6 +2489,8 @@ document.addEventListener('keydown', (e) => {
   const key = (e.key || '').toLowerCase();
   const openDlg = document.querySelector('dialog[open]');
 
+  if (mod && !e.shiftKey && key === 'k') { e.preventDefault(); togglePalette(); return; }
+
   // Une fenêtre est ouverte
   if (openDlg) {
     if (openDlg.id === 'dialog' && mod && e.key === 'Enter') { e.preventDefault(); $('form').requestSubmit(); }
@@ -2430,6 +2533,32 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.shiftKey) return;
 
+  if (e.key === 'Escape' && selectMode) { setSelectMode(false); return; }
+  if (state.view === 'list') {
+    const ids = [...document.querySelectorAll('#list .item')].map((li) => li.dataset.id);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!ids.length) return;
+      const i = ids.indexOf(kbId);
+      setKb(ids[e.key === 'ArrowDown' ? Math.min(i + 1, ids.length - 1) : (i < 0 ? 0 : Math.max(i - 1, 0))]);
+      return;
+    }
+    const cur = ids.includes(kbId) ? state.homework.find((h) => h.id === kbId) : null;
+    if (cur && e.key === ' ' && !e.target.closest('button,input,a,select')) {
+      e.preventDefault();
+      if (selectMode) { const cb = document.querySelector(`#list .item[data-id="${CSS.escape(kbId)}"] .check`); if (cb) cb.click(); }
+      else { setDone(cur, !cur.done); persist(); render(); }
+      return;
+    }
+    if (cur && e.key === 'Delete' && !selectMode) {
+      e.preventDefault();
+      const i = ids.indexOf(kbId);
+      const next = ids[i + 1] || ids[i - 1] || null;
+      if (!state.settings.confirmDelete || confirm(`Supprimer « ${cur.title} » ?`)) { kbId = next; deleteItems([cur], 'Devoir supprimé'); }
+      return;
+    }
+  }
+
   const cal = state.view === 'calendar';
   if (key === 'l') document.querySelector('#viewSeg button[data-view="list"]').click();
   else if (key === 'c') document.querySelector('#viewSeg button[data-view="calendar"]').click();
@@ -2439,6 +2568,209 @@ document.addEventListener('keydown', (e) => {
   else if (cal && key === 'm') document.querySelector('#calModeSeg button[data-mode="month"]').click();
   else if (cal && key === 's') document.querySelector('#calModeSeg button[data-mode="week"]').click();
 });
+
+
+// ---------- Clavier, sélection multiple, tri perso ----------
+function setKb(id) {
+  kbId = id;
+  document.querySelectorAll('#list .item.kb').forEach((x) => x.classList.remove('kb'));
+  const li = document.querySelector(`#list .item[data-id="${CSS.escape(id)}"]`);
+  if (li) { li.classList.add('kb'); li.scrollIntoView({ block: 'nearest' }); }
+}
+
+function renderBulk() {
+  $('bulkBar').hidden = !selectMode;
+  $('bulkCount').textContent = selected.size ? `${selected.size} sélectionné${selected.size > 1 ? 's' : ''}` : 'Coche des devoirs pour les sélectionner';
+  $('bulkDone').disabled = $('bulkDel').disabled = selected.size === 0;
+}
+
+function setSelectMode(on) {
+  selectMode = on;
+  selected.clear();
+  $('selBtn').classList.toggle('on', on);
+  renderBulk();
+  renderList();
+}
+
+function selectedItems() {
+  return state.homework.filter((h) => selected.has(h.id));
+}
+
+$('selBtn').addEventListener('click', () => setSelectMode(!selectMode));
+$('bulkCancel').addEventListener('click', () => setSelectMode(false));
+$('bulkAll').addEventListener('click', () => {
+  visibleItems().forEach((h) => selected.add(h.id));
+  renderBulk();
+  renderList();
+});
+$('bulkDone').addEventListener('click', () => {
+  const items = selectedItems();
+  if (!items.length) return;
+  items.forEach((h) => setDone(h, true));
+  persist();
+  setSelectMode(false);
+  render();
+  showToast(`${items.length} devoir${items.length > 1 ? 's' : ''} terminé${items.length > 1 ? 's' : ''}`);
+});
+$('bulkDel').addEventListener('click', () => {
+  const items = selectedItems();
+  if (!items.length) return;
+  if (state.settings.confirmDelete && !confirm(`Supprimer ${items.length} devoir${items.length > 1 ? 's' : ''} ?`)) return;
+  selected.clear();
+  deleteItems(items, `${items.length} devoir${items.length > 1 ? 's supprimés' : ' supprimé'}`);
+  setSelectMode(false);
+});
+
+function reorderTo(fromId, toId) {
+  const items = visibleItems();
+  const ids = items.map((h) => h.id);
+  const from = ids.indexOf(fromId);
+  const to = ids.indexOf(toId);
+  if (from < 0 || to < 0 || from === to) return;
+  // Numéros uniques pour tous les devoirs, en gardant l'ordre actuel
+  [...state.homework].sort((a, b) => ordOf(a) - ordOf(b)).forEach((h, i) => { h.order = i * 10; });
+  const orders = items.map((h) => h.order).sort((a, b) => a - b);
+  ids.splice(to, 0, ids.splice(from, 1)[0]);
+  ids.forEach((id, i) => { state.homework.find((h) => h.id === id).order = orders[i]; });
+  persist();
+  renderList();
+}
+
+// ---------- Réglages d'apparence ----------
+$('fontSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-scale]');
+  if (!b) return;
+  state.settings.fontScale = Number(b.dataset.scale);
+  persist();
+  applyTheme();
+});
+$('s-compact').addEventListener('change', (e) => { state.settings.compact = e.target.checked; persist(); applyTheme(); });
+setInterval(() => { if (state.settings.theme === 'time') applyTheme(); }, 60 * 1000);
+
+// ---------- Minuteur de travail (Pomodoro, 25 min) ----------
+let pomo = null;
+const pomoBox = document.createElement('div');
+pomoBox.className = 'pomo';
+pomoBox.hidden = true;
+pomoBox.innerHTML = '<div><b id="pomoTime">25:00</b><br><small id="pomoTitle"></small></div>' +
+  '<button type="button" class="ghost small" id="pomoPause">Pause</button><button type="button" class="ghost small" id="pomoStop">Arrêter</button>';
+document.body.append(pomoBox);
+
+function renderTimer() {
+  pomoBox.hidden = !pomo;
+  if (!pomo) return;
+  const ms = pomo.left !== null ? pomo.left : Math.max(0, pomo.end - Date.now());
+  const s = Math.ceil(ms / 1000);
+  $('pomoTime').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  $('pomoTitle').textContent = pomo.title;
+  $('pomoPause').textContent = pomo.left !== null ? 'Reprendre' : 'Pause';
+}
+function stopTimer() {
+  if (pomo) clearInterval(pomo.iv);
+  pomo = null;
+  renderTimer();
+}
+function startTimer(h) {
+  stopTimer();
+  pomo = { title: h.title, end: Date.now() + 25 * 60 * 1000, left: null, iv: setInterval(tickTimer, 500) };
+  renderTimer();
+}
+function tickTimer() {
+  if (!pomo || pomo.left !== null) return;
+  if (Date.now() < pomo.end) { renderTimer(); return; }
+  const t = pomo.title;
+  stopTimer();
+  showToast(`Minuteur terminé : « ${t} ». Fais une pause de 5 minutes !`);
+  try { new Notification('Minuteur terminé', { body: `« ${t} » : 25 minutes de travail. Pause de 5 minutes !` }); } catch (_) { /* notification indisponible */ }
+}
+$('pomoPause').addEventListener('click', () => {
+  if (!pomo) return;
+  if (pomo.left === null) pomo.left = Math.max(0, pomo.end - Date.now());
+  else { pomo.end = Date.now() + pomo.left; pomo.left = null; }
+  renderTimer();
+});
+$('pomoStop').addEventListener('click', stopTimer);
+
+// ---------- Palette de commandes (Ctrl+K) ----------
+const cmdDlg = document.createElement('dialog');
+cmdDlg.className = 'cmdk';
+cmdDlg.id = 'cmdk';
+cmdDlg.innerHTML = '<input type="text" id="cmdIn" placeholder="Tape une action : nouveau devoir, thème sombre…" autocomplete="off"><ul id="cmdList"></ul>';
+document.body.append(cmdDlg);
+let cmdShown = [];
+let cmdPos = 0;
+const normTxt = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const clickIf = (sel) => { const b = document.querySelector(sel); if (b) b.click(); };
+const setTheme = (t) => { state.settings.theme = t; persist(); applyTheme(); };
+const setScale = (d) => {
+  const steps = [90, 100, 115, 130];
+  const i = Math.max(0, steps.indexOf(state.settings.fontScale || 100));
+  state.settings.fontScale = steps[Math.min(steps.length - 1, Math.max(0, i + d))];
+  persist(); applyTheme();
+};
+
+function cmdActions() {
+  const a = [
+    ['Nouveau devoir', () => openDialog(null), 'ajouter creer'],
+    ['Thème clair', () => setTheme('light'), 'theme'],
+    ['Thème sombre', () => setTheme('dark'), 'theme nuit'],
+    ['Thème automatique (suit Windows)', () => setTheme('auto'), 'theme'],
+    ["Thème selon l'heure", () => setTheme('time'), 'theme jour soir'],
+    ['Vue liste', () => clickIf('#viewSeg button[data-view="list"]'), 'affichage'],
+    ['Vue calendrier', () => clickIf('#viewSeg button[data-view="calendar"]'), 'affichage'],
+    ['Statistiques', () => openStats(), 'stats'],
+    ['Imprimer / exporter en PDF', () => openPrint(), 'pdf'],
+    ['Paramètres', () => openSettings('appearance'), 'reglages options'],
+    ['Raccourcis clavier', () => openHelp(), 'aide'],
+    [state.settings.compact ? 'Désactiver le mode compact' : 'Activer le mode compact', () => { state.settings.compact = !state.settings.compact; persist(); applyTheme(); }, 'serre dense'],
+    ['Texte plus grand', () => setScale(1), 'taille police zoom'],
+    ['Texte plus petit', () => setScale(-1), 'taille police zoom'],
+    ['Sélection multiple', () => { clickIf('#viewSeg button[data-view="list"]'); setSelectMode(!selectMode); }, 'selectionner plusieurs'],
+    ['Tri personnalisé (glisser-déposer)', () => { $('sort').value = 'custom'; $('sort').dispatchEvent(new Event('change')); }, 'ordre trier'],
+    ['Minuteur de travail 25 min', () => { const h = state.homework.find((x) => x.id === kbId) || visibleItems().find((x) => !x.done); if (h) startTimer(h); else showToast('Aucun devoir à travailler'); }, 'pomodoro chrono'],
+  ];
+  [['today', "Aujourd'hui"], ['todo', 'À faire'], ['late', 'En retard'], ['week', 'Cette semaine'], ['done', 'Terminés'], ['all', 'Tous les devoirs']]
+    .forEach(([f, l]) => a.push([`Afficher : ${l}`, () => clickIf(`#filters button[data-filter="${f}"]`), 'filtre']));
+  if (pomo) a.push(['Arrêter le minuteur', stopTimer, 'pomodoro chrono']);
+  return a;
+}
+
+function renderCmd() {
+  const words = normTxt($('cmdIn').value).split(/\s+/).filter(Boolean);
+  cmdShown = cmdActions().filter(([l, , k]) => { const t = normTxt(`${l} ${k || ''}`); return words.every((w) => t.includes(w)); });
+  cmdPos = Math.min(cmdPos, Math.max(0, cmdShown.length - 1));
+  const ul = $('cmdList');
+  ul.textContent = '';
+  cmdShown.forEach(([label], i) => {
+    const li = el('li', i === cmdPos ? 'on' : '', label);
+    li.addEventListener('click', () => runCmd(i));
+    ul.append(li);
+  });
+  const on = ul.querySelector('.on');
+  if (on) on.scrollIntoView({ block: 'nearest' });
+}
+function runCmd(i) {
+  const c = cmdShown[i];
+  if (!c) return;
+  cmdDlg.close();
+  setTimeout(c[1], 0);
+}
+function togglePalette() {
+  if (cmdDlg.open) { cmdDlg.close(); return; }
+  if (document.querySelector('dialog[open]')) return;
+  $('cmdIn').value = '';
+  cmdPos = 0;
+  renderCmd();
+  cmdDlg.showModal();
+  $('cmdIn').focus();
+}
+$('cmdIn').addEventListener('input', () => { cmdPos = 0; renderCmd(); });
+$('cmdIn').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmdPos = Math.min(cmdPos + 1, cmdShown.length - 1); renderCmd(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); cmdPos = Math.max(cmdPos - 1, 0); renderCmd(); }
+  else if (e.key === 'Enter') { e.preventDefault(); runCmd(cmdPos); }
+});
+cmdDlg.addEventListener('click', (e) => { if (e.target === cmdDlg) cmdDlg.close(); });
 
 // Rafraîchir à minuit (changement de jour) et au retour sur la fenêtre
 let lastDay = todayStr();
@@ -2453,6 +2785,7 @@ window.addEventListener('focus', checkDayChange);
   hydrateIcons();
   const data = await window.devoirsAPI.load();
   state.homework = data.homework;
+  const pendingSpawned = applyPendingSpawns();
 
   const defaults = { theme: 'light', accent: 'indigo', sort: 'date', startFilter: 'todo', defaultPriority: '1', confirmDelete: true, updateRepo: DEFAULT_UPDATE_REPO, view: 'list', calMode: 'month', updateTag: '' };
   state.settings = Object.assign(defaults, data.settings);
@@ -2477,5 +2810,6 @@ window.addEventListener('focus', checkDayChange);
   applyTheme();
   render();
   appReady = true;
+  if (pendingSpawned) persist();
   if (pendingOpenFilter !== null) { openFromNotification(pendingOpenFilter); pendingOpenFilter = null; }
 })();

@@ -11,9 +11,9 @@ const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_HOMEWORK = 20000;
 const MAX_SUBJECTS = 200;
 
-const THEMES = ['light', 'dark', 'auto'];
+const THEMES = ['light', 'dark', 'auto', 'time'];
 const ACCENTS = ['indigo', 'violet', 'rose', 'rouge', 'orange', 'vert', 'turquoise', 'bleu'];
-const SORTS = ['date', 'priority', 'subject', 'created'];
+const SORTS = ['date', 'priority', 'subject', 'created', 'custom'];
 const FILTERS = ['today', 'todo', 'late', 'week', 'done', 'all'];
 const COLOR = /^#[0-9a-f]{6}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -80,6 +80,7 @@ function sanitizeHomework(list) {
       done: !!h.done,
       doneAt: h.done ? num(h.doneAt) : null,
       created: num(h.created) || Date.now(),
+      order: Number.isFinite(Number(h.order)) && h.order !== null ? Number(h.order) : undefined,
     };
     // Champs ajoutés plus tard : on ne les écrit que s'ils sont utilisés (fichiers plus légers, anciens fichiers inchangés)
     if (KINDS.includes(h.kind)) item.kind = h.kind;
@@ -141,6 +142,8 @@ function sanitizeSettings(raw) {
   if (['1', '2', '3'].includes(String(s.defaultPriority))) out.defaultPriority = String(s.defaultPriority);
   if (typeof s.confirmDelete === 'boolean') out.confirmDelete = s.confirmDelete;
   if (s.view === 'list' || s.view === 'calendar') out.view = s.view;
+  if ([90, 100, 115, 130].includes(Number(s.fontScale))) out.fontScale = Number(s.fontScale);
+  if (typeof s.compact === 'boolean') out.compact = s.compact;
   if (s.calMode === 'month' || s.calMode === 'week') out.calMode = s.calMode;
   if (s.notifications && typeof s.notifications === 'object') out.notifications = normalizeSettings(s.notifications);
   return out;

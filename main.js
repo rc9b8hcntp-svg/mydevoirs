@@ -3,7 +3,10 @@ const path = require('path');
 const fs = require('fs');
 const { checkForUpdate, listReleases } = require('./updater');
 const { downloadFile } = require('./downloader');
-const { normalizeSettings, buildDigest, isDue, ymd } = require('./notifier');
+const {
+  normalizeSettings, buildDigest, isDue, ymd, isPaused, isDueAt, buildMorning, buildReminder,
+  dueTomorrow, actionUrl, parseActionUrl, buildToastXml,
+} = require('./notifier');
 const backup = require('./backup');
 
 // Nécessaire pour que Windows affiche correctement les notifications de l'appli
@@ -137,9 +140,22 @@ function applySystemSettings(settings) {
 }
 
 // ---------- Notifications ----------
-function notify({ title, body, filter }) {
+function notify({ title, body, filter, homeworkId }) {
   if (!Notification.isSupported()) return false;
-  const n = new Notification({ title, body, icon: ICON_PATH });
+  const s = notifSettings();
+  const opts = { title, body, icon: ICON_PATH, silent: s.sound === 'silent' };
+  if (process.platform === 'win32') {
+    // 12 : boutons dans la notification (ils relancent l'appli en douce via mesdevoirs://…, sans ouvrir la fenêtre)
+    // 15 : son au choix ou silence
+    const actions = s.actions && homeworkId
+      ? [
+        { label: 'Marquer fait', url: actionUrl('done', homeworkId) },
+        { label: 'Rappeler demain', url: actionUrl('snooze', homeworkId) },
+      ]
+      : [];
+    opts.toastXml = buildToastXml({ title, body, sound: s.sound, actions });
+  }
+  const n = new Notification(opts);
   liveNotifications.add(n);
   const forget = () => liveNotifications.delete(n);
   n.on('click', () => {
@@ -167,21 +183,84 @@ function showTrayHintOnce() {
   });
 }
 
-// Envoie le rappel quotidien si l'heure est passée et qu'il n'a pas encore été envoyé aujourd'hui
-// (si l'appli était fermée à l'heure prévue, il part dès son ouverture).
+// Envoie les rappels dont l'heure est passée et qui n'ont pas encore été envoyés aujourd'hui
+// (si l'appli était fermée à l'heure prévue, ils partent dès son ouverture).
 function tick() {
   try {
     const data = readData();
     const s = normalizeSettings(data.settings.notifications);
-    const state = readNotifState();
     const now = new Date();
-    if (!isDue(s, state.lastSent, now)) return;
-    state.lastSent = ymd(now);
-    writeNotifState(state);
-    const digest = buildDigest(data.homework, s, now);
-    if (digest) notify(digest);
+    if (isPaused(s, now)) return; // 14. mode vacances : rien du tout
+    const state = readNotifState();
+    const today = ymd(now);
+    const out = [];
+    let changed = false;
+
+    // Rappel quotidien (liste)
+    if (isDue(s, state.lastSent, now)) {
+      state.lastSent = today; changed = true;
+      const digest = buildDigest(data.homework, s, now);
+      if (digest) out.push(digest);
+    }
+
+    // 13. Rappel du matin (abandonné s'il est trop tard dans la journée)
+    if (s.morning && isDueAt(s.morningTime, state.lastMorning, now)) {
+      state.lastMorning = today; changed = true;
+      if (isDueAt(s.morningTime, undefined, now, 240)) {
+        const m = buildMorning(data.homework, s, now);
+        if (m) out.push(m);
+      }
+    }
+
+    // 11. Une notification par devoir, la veille de l'échéance
+    if (s.dueReminder && isDueAt(s.dueTime, state.lastDue, now)) {
+      state.lastDue = today; changed = true;
+      const list = dueTomorrow(data.homework, now);
+      list.slice(0, 5).forEach((h) => out.push(buildReminder(h, now)));
+      if (list.length > 5) out.push({ title: `${list.length - 5} autres devoirs pour demain`, body: 'Ouvre la liste pour les voir.', filter: 'today' });
+    }
+
+    // Devoirs « rappelés demain » dont l'heure est venue
+    const snoozed = state.snoozed && typeof state.snoozed === 'object' ? state.snoozed : {};
+    Object.keys(snoozed).forEach((id) => {
+      if (snoozed[id] > now.getTime()) return;
+      delete snoozed[id]; changed = true;
+      const h = data.homework.find((x) => x && x.id === id);
+      if (h && !h.done) out.push(buildReminder(h, now));
+    });
+    state.snoozed = snoozed;
+
+    if (changed) writeNotifState(state);
+    out.forEach(notify);
   } catch (e) { /* on réessaiera au prochain passage */ }
 }
+
+// 12. Actions des boutons de notification (mesdevoirs://done/ID ou mesdevoirs://snooze/ID)
+function handleAction({ action, id }) {
+  try {
+    const data = readData();
+    if (action === 'done') {
+      const h = data.homework.find((x) => x && x.id === id);
+      if (!h || h.done) return;
+      h.done = true;
+      h.doneAt = Date.now();
+      if (h.repeat && h.date) h.pendingSpawn = true; // l'appli créera le prochain devoir à sa prochaine ouverture
+      writeData(data);
+      if (mainWindow) mainWindow.webContents.send('data:changed', data.homework);
+    } else if (action === 'snooze') {
+      const s = notifSettings();
+      const when = new Date();
+      const [hh, mm] = s.morningTime.split(':').map(Number);
+      when.setDate(when.getDate() + 1);
+      when.setHours(hh, mm, 0, 0);
+      const state = readNotifState();
+      state.snoozed = Object.assign({}, state.snoozed, { [id]: when.getTime() });
+      writeNotifState(state);
+    }
+  } catch (e) { /* ignoré */ }
+}
+
+const actionFromArgv = (argv) => (argv || []).map(parseActionUrl).find(Boolean) || null;
 
 function startScheduler() {
   setTimeout(tick, 4000);
@@ -391,14 +470,25 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => showWindow());
+  app.on('second-instance', (_e, argv) => {
+    const a = actionFromArgv(argv);
+    if (a) handleAction(a); else showWindow();
+  });
   app.on('before-quit', () => { isQuitting = true; });
 
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
     const settings = readData().settings;
     // Lancé par Windows au démarrage : on reste discret dans la zone de notification
-    const startHidden = process.argv.includes('--hidden') && normalizeSettings(settings.notifications).background;
+    const launchAction = actionFromArgv(process.argv);
+    const bg = normalizeSettings(settings.notifications).background;
+    const startHidden = (process.argv.includes('--hidden') || !!launchAction) && bg;
+    // Lancé par un bouton de notification alors que l'appli était fermée : on fait l'action et on repart
+    if (launchAction) {
+      handleAction(launchAction);
+      if (!bg) { isQuitting = true; app.quit(); return; }
+    }
+    if (app.isPackaged) { try { app.setAsDefaultProtocolClient('mesdevoirs'); } catch (e) { /* ignoré */ } }
     createWindow(startHidden);
     applySystemSettings(settings);
     startScheduler();

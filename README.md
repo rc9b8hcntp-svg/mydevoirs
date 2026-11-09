@@ -17,6 +17,7 @@ Un petit logiciel Windows pour noter ses devoirs.
 - Données enregistrées en local dans `%APPDATA%\Mes Devoirs\devoirs.json`
 - Mise à jour : Paramètres → Mise à jour compare ta version avec la dernière « Release » de ton dépôt GitHub et propose de la télécharger. Le menu « Version à rechercher » permet aussi de choisir un **tag** précis (liste des Releases du dépôt) pour viser une version donnée ou revenir en arrière
 - **Notifications** : un rappel quotidien Windows (heure au choix, 18:00 par défaut) listant les devoirs à rendre aujourd'hui / demain / dans la semaine, et ceux en retard. Un clic sur la notification ouvre la bonne liste. Paramètres → Notifications
+- **Notifications avancées** (Paramètres → Notifications) : un rappel par devoir la veille de l'échéance, des boutons « Marquer fait » / « Rappeler demain » dans la notification (sans ouvrir l'appli), un rappel du matin (« tes devoirs du jour »), un mode vacances (coupe les rappels entre deux dates) et le choix du son (ou silencieux)
 - L'appli peut rester dans la zone de notification quand on ferme la fenêtre (pour que les rappels arrivent) et se lancer au démarrage de Windows
 - Raccourcis : `Ctrl+N` nouveau devoir, `Ctrl+F` recherche
 

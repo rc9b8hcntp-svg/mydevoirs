@@ -68,7 +68,16 @@
           <option value="priority">Trier par priorité</option>
           <option value="subject">Trier par matière</option>
           <option value="created">Plus récents d'abord</option>
+          <option value="custom">Ordre personnalisé (glisser)</option>
         </select>
+        <button type="button" class="ghost" id="selBtn" title="Sélection multiple">Sélectionner</button>
+      </div>
+      <div class="bulk" id="bulkBar" hidden>
+        <span id="bulkCount"></span>
+        <button type="button" class="ghost small" id="bulkAll">Tout</button>
+        <button type="button" class="ghost small" id="bulkDone">Terminer</button>
+        <button type="button" class="ghost small" id="bulkDel">Supprimer</button>
+        <button type="button" class="ghost small" id="bulkCancel">Fermer</button>
       </div>
 
       <section id="calendar" class="calendar" hidden>
@@ -299,13 +308,32 @@
               <button data-theme="light"><span class="ico" data-icon="sun"></span>Clair</button>
               <button data-theme="dark"><span class="ico" data-icon="moon"></span>Sombre</button>
               <button data-theme="auto"><span class="ico" data-icon="monitor"></span>Automatique</button>
+              <button data-theme="time"><span class="ico" data-icon="clock"></span>Selon l'heure</button>
             </div>
-            <p class="hint">« Automatique » suit le thème de Windows.</p>
+            <p class="hint">« Automatique » suit le thème de Windows. « Selon l'heure » : clair de 7 h à 19 h, sombre ensuite.</p>
           </div>
 
           <div class="group">
             <div class="group-label">Couleur principale</div>
             <div id="accentList" class="palette"></div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Taille du texte</div>
+            <div class="seg wide" id="fontSeg" role="radiogroup" aria-label="Taille du texte">
+              <button data-scale="90">Petit</button>
+              <button data-scale="100">Normal</button>
+              <button data-scale="115">Grand</button>
+              <button data-scale="130">Très grand</button>
+            </div>
+          </div>
+
+          <div class="setting">
+            <div>
+              <div class="group-label">Mode compact</div>
+              <p class="hint">Liste plus serrée quand tu as beaucoup de devoirs.</p>
+            </div>
+            <input type="checkbox" class="switch" id="s-compact" aria-label="Mode compact">
           </div>
         </section>
 
@@ -395,6 +423,58 @@
           <div class="setting">
             <div class="desc">Inclure les devoirs en retard<small>Ils sont ajoutés au rappel tant qu'ils ne sont pas terminés.</small></div>
             <input type="checkbox" class="switch" id="n-late" aria-label="Inclure les devoirs en retard">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Un rappel par devoir<small>Une notification pour chaque devoir à rendre demain (la veille de l'échéance).</small></div>
+            <input type="checkbox" class="switch" id="n-due" aria-label="Activer un rappel par devoir">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Heure du rappel par devoir<small>Par exemple la veille à 18h.</small></div>
+            <input type="time" id="n-due-time" aria-label="Heure du rappel par devoir">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Rappel du matin<small>Une notification « tes devoirs du jour ».</small></div>
+            <input type="checkbox" class="switch" id="n-morning" aria-label="Activer le rappel du matin">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Heure du rappel du matin<small>Chaque jour à cette heure-là.</small></div>
+            <input type="time" id="n-morning-time" aria-label="Heure du rappel du matin">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Boutons dans la notification<small>« Marquer fait » et « Rappeler demain » directement depuis la notification d'un devoir, sans ouvrir l'appli.</small></div>
+            <input type="checkbox" class="switch" id="n-actions" aria-label="Boutons dans la notification">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Son de notification<small>Choisis un son, ou rends les notifications silencieuses.</small></div>
+            <select id="n-sound" aria-label="Son de notification">
+              <option value="default">Son par défaut</option>
+              <option value="reminder">Rappel</option>
+              <option value="im">Message</option>
+              <option value="mail">Courrier</option>
+              <option value="sms">SMS</option>
+              <option value="silent">Silencieux</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Mode vacances<small>Coupe tous les rappels entre deux dates.</small></div>
+            <input type="checkbox" class="switch" id="n-vac" aria-label="Activer le mode vacances">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Début des vacances<small>Premier jour sans rappel.</small></div>
+            <input type="date" id="n-vac-from" aria-label="Début des vacances">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Fin des vacances<small id="n-vac-msg">Dernier jour sans rappel.</small></div>
+            <input type="date" id="n-vac-to" aria-label="Fin des vacances">
           </div>
 
           <div class="setting">

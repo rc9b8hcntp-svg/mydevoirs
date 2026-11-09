@@ -20,5 +20,7 @@ contextBridge.exposeInMainWorld('devoirsAPI', {
   openFile: (filePath) => ipcRenderer.invoke('file:open', filePath),
   openLink: (url) => ipcRenderer.invoke('link:open', url),
   // Appelé quand l'utilisateur clique sur une notification (reçoit le filtre à afficher)
+  // Les boutons d'une notification ont modifié les devoirs : reçoit la nouvelle liste
+  onDataChanged: (cb) => ipcRenderer.on('data:changed', (_e, homework) => cb(homework)),
   onNotificationOpen: (cb) => ipcRenderer.on('notif:open', (_e, filter) => cb(filter)),
 });
