@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('devoirsAPI', {
   pickBackup: () => ipcRenderer.invoke('backup:pick'),
   applyBackup: (current, options) => ipcRenderer.invoke('backup:apply', current, options),
   cancelBackup: () => ipcRenderer.invoke('backup:cancel'),
+  printPage: () => ipcRenderer.invoke('print:run'),
+  savePdf: (name) => ipcRenderer.invoke('print:pdf', name),
   pickFiles: () => ipcRenderer.invoke('file:pick'),
   openFile: (filePath) => ipcRenderer.invoke('file:open', filePath),
   openLink: (url) => ipcRenderer.invoke('link:open', url),

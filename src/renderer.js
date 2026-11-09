@@ -4,7 +4,7 @@
 const PRIORITY_LABELS = { 1: 'Normale', 2: 'Importante', 3: 'Urgente' };
 const KINDS = { controle: { label: 'Contrôle', emoji: '📝' }, expose: { label: 'Exposé', emoji: '🎤' } }; // vide = simple devoir
 const REPEATS = { daily: 'Chaque jour', weekly: 'Chaque semaine', monthly: 'Chaque mois' };
-const FILTER_LABELS = { todo: 'À faire', late: 'En retard', week: 'Cette semaine', done: 'Terminés', all: 'Tous les devoirs' };
+const FILTER_LABELS = { today: "Aujourd'hui et demain", todo: 'À faire', late: 'En retard', week: 'Cette semaine', done: 'Terminés', all: 'Tous les devoirs' };
 const NEUTRAL = '#8b93a7';
 const DEFAULT_UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
 const NOTIF_DEFAULTS = { enabled: true, time: '18:00', daysAhead: 1, includeLate: true, background: true, startup: false };
@@ -80,6 +80,8 @@ const ICONS = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 16v-4M13 16V8M18 16v-7"/>',
+  printer: '<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="9" rx="2"/><path d="M7 14h10v7H7z"/>',
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
   paperclip: '<path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 1 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
   repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
@@ -150,6 +152,29 @@ function isThisWeek(h) {
   if (h.done || !h.date) return false;
   const n = daysUntil(h.date);
   return n >= 0 && n <= 7;
+}
+
+function shiftDate(str, n) {
+  const d = parseDate(str);
+  return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+}
+function isoDow(str) { // 1 = lundi … 7 = dimanche
+  return (parseDate(str).getDay() + 6) % 7 + 1;
+}
+const DAY_NAMES = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const DAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+function fmtNum(n) {
+  return String(Math.round(n * 100) / 100).replace('.', ',');
+}
+// Matières qui ont cours ce jour-là (emploi du temps)
+function classesOn(date) {
+  const d = isoDow(date);
+  return state.settings.subjects.filter((s) => (s.days || []).includes(d)).map((s) => s.name);
+}
+function isTodayOrTomorrow(h) {
+  if (h.done || !h.date) return false;
+  const n = daysUntil(h.date);
+  return n >= 0 && n <= 1;
 }
 
 function fmtMinutes(m) {
@@ -360,6 +385,11 @@ function buildMeta(h, opts) {
     t.title = 'Durée estimée';
     meta.append(t);
   }
+  if (typeof h.grade === 'number') {
+    const t = el('span', 'tag grade', `Note ${fmtNum(h.grade)}/${fmtNum(h.gradeMax > 0 ? h.gradeMax : 20)}`);
+    t.title = `Coefficient ${fmtNum(h.coef > 0 ? h.coef : 1)}`;
+    meta.append(t);
+  }
   if ((h.subtasks || []).length) {
     const t = el('span', 'tag sub-progress');
     t.dataset.id = h.id;
@@ -539,6 +569,7 @@ function visibleItems() {
     if (state.subject !== null && !sameName(h.subject, state.subject)) return false;
     if (q && !searchText(h).includes(q)) return false;
     switch (state.filter) {
+      case 'today': return isTodayOrTomorrow(h);
       case 'todo': return !h.done;
       case 'late': return isLate(h);
       case 'week': return isThisWeek(h);
@@ -569,6 +600,7 @@ function visibleItems() {
 // ---------- Rendu ----------
 function renderCounts() {
   const hw = state.homework;
+  $('c-today').textContent = hw.filter(isTodayOrTomorrow).length;
   $('c-todo').textContent = hw.filter((h) => !h.done).length;
   $('c-late').textContent = hw.filter(isLate).length;
   $('c-week').textContent = hw.filter(isThisWeek).length;
@@ -631,6 +663,7 @@ function renderList() {
   $('empty').hidden = items.length > 0;
   if (items.length === 0) {
     const msgs = {
+      today: ['🎉', "Rien à faire aujourd'hui ni demain."],
       todo: ['🎉', 'Aucun devoir à faire. Profites-en !'],
       late: ['👍', 'Aucun devoir en retard.'],
       week: ['😎', 'Rien de prévu cette semaine.'],
@@ -643,7 +676,7 @@ function renderList() {
     return;
   }
 
-  items.forEach((h) => {
+  const addItem = (h) => {
     const color = subjectColor(h.subject);
     const li = el('li', 'item' + (h.done ? ' done' : ''));
     li.style.setProperty('--c', color);
@@ -690,6 +723,33 @@ function renderList() {
 
     li.append(cb, body, btns);
     list.append(li);
+  };
+  if (state.filter === 'today') renderTodayGroups(items, addItem, list);
+  else items.forEach(addItem);
+}
+
+// Page « Aujourd'hui » : deux blocs (aujourd'hui, demain) avec les cours du jour et le temps de travail
+function renderTodayGroups(items, addItem, list) {
+  const late = state.homework.filter(isLate).length;
+  if (late > 0) {
+    const li = el('li', 'late-notice');
+    const b = button(null, `⚠ ${late} devoir${late > 1 ? 's' : ''} en retard — Voir`);
+    b.addEventListener('click', () => { state.filter = 'late'; render(); });
+    li.append(b);
+    list.append(li);
+  }
+  const today = todayStr();
+  [[today, "Aujourd'hui"], [shiftDate(today, 1), 'Demain']].forEach(([date, label]) => {
+    const group = items.filter((h) => h.date === date);
+    const head = el('li', 'group-head');
+    head.append(el('strong', null, label), el('span', 'gh-date', formatDate(date)));
+    const classes = classesOn(date);
+    if (classes.length) head.append(el('span', 'gh-classes', 'Cours : ' + classes.join(', ')));
+    const mins = group.reduce((sum, h) => sum + (h.minutes || 0), 0);
+    if (mins > 0) head.append(el('span', 'gh-time', '≈ ' + fmtMinutes(mins)));
+    list.append(head);
+    if (group.length === 0) list.append(el('li', 'group-empty', 'Rien à faire.'));
+    else group.forEach(addItem);
   });
 }
 
@@ -993,10 +1053,19 @@ function renderPicker() {
   const list = [...state.settings.subjects];
   if (pickedSubject && !findSubject(pickedSubject)) list.push({ id: 'orphan', name: pickedSubject, color: NEUTRAL });
 
+  // Emploi du temps : les matières qui ont cours le jour choisi passent devant
+  const date = $('f-date').value;
+  const today = date ? classesOn(date) : [];
+  if (today.length) list.sort((a, b) => (today.includes(b.name) ? 1 : 0) - (today.includes(a.name) ? 1 : 0));
+  const hint = $('f-subject-hint');
+  hint.hidden = today.length === 0;
+  hint.textContent = today.length ? `Cours le ${DAY_NAMES[isoDow(date) - 1]} : ${today.join(', ')}` : '';
+
   list.forEach((s) => {
     const on = sameName(s.name, pickedSubject);
     const b = button('chip' + (on ? ' on' : ''));
     b.style.setProperty('--c', s.color);
+    if (today.includes(s.name)) { b.classList.add('suggest'); b.title = 'Cours ce jour-là'; }
     b.setAttribute('aria-pressed', String(on));
     b.append(el('span', 'dot'), s.name);
     if (on) b.append(mkIcon('check'));
@@ -1060,6 +1129,7 @@ function setKind(value) {
     b.classList.toggle('on', on);
     b.setAttribute('aria-checked', String(on));
   });
+  $('f-grade-box').hidden = !pickedKind; // la note n'a de sens que pour un contrôle ou un exposé
 }
 
 // La répétition a besoin d'une date
@@ -1153,6 +1223,10 @@ function openDialog(id, presetDate, template) {
   $('f-minutes').value = src && src.minutes ? src.minutes : '';
   $('f-repeat').value = src && src.repeat ? src.repeat : '';
   setKind(src ? src.kind : '');
+  const graded = !!src && !copy && typeof src.grade === 'number';
+  $('f-grade').value = graded ? src.grade : '';
+  $('f-grade-max').value = graded && src.gradeMax ? src.gradeMax : '';
+  $('f-coef').value = graded && src.coef ? src.coef : '';
   setPriority(src ? (src.priority || 1) : (state.settings.defaultPriority || 1));
   pickedSubject = src ? src.subject || '' : (state.subject || '');
   formSubs = ((src && src.subtasks) || []).map((s) => ({ id: copy ? uid() : s.id, text: s.text, done: copy ? false : !!s.done }));
@@ -1181,6 +1255,8 @@ $('form').addEventListener('submit', (e) => {
   addFormSub(); // ce qui est tapé mais pas encore ajouté
   addFormTags($('f-tag-input').value);
   const date = $('f-date').value;
+  const gradeText = $('f-grade').value.trim();
+  const grade = pickedKind && gradeText !== '' && Number.isFinite(Number(gradeText)) ? Math.max(0, Number(gradeText)) : null;
   const data = {
     title,
     subject: pickedSubject,
@@ -1193,6 +1269,9 @@ $('form').addEventListener('submit', (e) => {
     tags: formTags.slice(),
     subtasks: formSubs.map((s) => ({ ...s })),
     attachments: formFiles.map((a) => ({ ...a })),
+    grade,
+    gradeMax: grade === null ? null : (Number($('f-grade-max').value) > 0 ? Number($('f-grade-max').value) : 20),
+    coef: grade === null ? null : (Number($('f-coef').value) > 0 ? Number($('f-coef').value) : 1),
   };
   if (state.editingId) {
     const h = state.homework.find((x) => x.id === state.editingId);
@@ -1210,6 +1289,7 @@ $('f-kind').addEventListener('click', (e) => {
   if (b) setKind(b.dataset.value);
 });
 $('f-date').addEventListener('input', updateRepeatField);
+$('f-date').addEventListener('input', renderPicker);
 $('f-repeat').addEventListener('change', updateRepeatField);
 $('f-sub-add').addEventListener('click', addFormSub);
 $('f-sub-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addFormSub(); } });
@@ -1246,6 +1326,7 @@ let colorEditing = null; // id de la matière dont on change la couleur
 let newSubjectColor = SUBJECT_COLORS[0].value;
 
 function showTab(tab) {
+  if (tab === 'schedule') renderSchedule();
   if (tab === 'update') loadTags();
   if (tab !== 'backup' && typeof resetImportBox === 'function' && !$('bi-box').hidden) { window.devoirsAPI.cancelBackup(); resetImportBox(); }
   document.querySelectorAll('#setNav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
@@ -1270,6 +1351,7 @@ function openSettings(tab) {
 }
 
 function renderSubjectManager() {
+  renderSchedule();
   const box = $('s-subjects');
   box.textContent = '';
   const subjects = state.settings.subjects;
@@ -1314,6 +1396,44 @@ function renderSubjectManager() {
       prow.append(pal);
       box.append(prow);
     }
+  });
+}
+
+function renderSchedule() {
+  const box = $('s-schedule');
+  box.textContent = '';
+  const subjects = state.settings.subjects;
+  if (subjects.length === 0) {
+    box.append(el('div', 'empty-rows', "Aucune matière. Ajoutes-en dans l'onglet Matières."));
+    return;
+  }
+  const head = el('div', 'sched-row sched-head');
+  head.append(el('span', 'sched-name'));
+  DAY_SHORT.forEach((d) => head.append(el('span', 'sched-day', d)));
+  box.append(head);
+  subjects.forEach((s) => {
+    const row = el('div', 'sched-row');
+    const name = el('span', 'sched-name');
+    name.style.setProperty('--c', s.color);
+    name.append(el('span', 'dot'), s.name);
+    row.append(name);
+    DAY_SHORT.forEach((d, i) => {
+      const on = (s.days || []).includes(i + 1);
+      const b = button('sched-cell' + (on ? ' on' : ''));
+      b.style.setProperty('--c', s.color);
+      b.setAttribute('aria-pressed', String(on));
+      b.setAttribute('aria-label', `${s.name}, ${DAY_NAMES[i]}`);
+      if (on) b.append(mkIcon('check'));
+      b.addEventListener('click', () => {
+        const days = new Set(s.days || []);
+        if (days.has(i + 1)) days.delete(i + 1); else days.add(i + 1);
+        s.days = [...days].sort();
+        persist();
+        renderSchedule();
+      });
+      row.append(b);
+    });
+    box.append(row);
   });
 }
 
@@ -1856,6 +1976,348 @@ $('clearDone').addEventListener('click', () => {
   }
 });
 
+// ---------- Statistiques ----------
+// Série : jours de suite (jusqu'à aujourd'hui) où aucun devoir n'était en retard
+function lateStreak() {
+  if (!state.homework.length) return null;
+  const today = todayStr();
+  let start = today;
+  state.homework.forEach((h) => {
+    if (h.created) { const c = ymd(new Date(h.created)); if (c < start) start = c; }
+  });
+  const floor = shiftDate(today, -400);
+  if (start < floor) start = floor;
+  const bad = new Set();
+  state.homework.forEach((h) => {
+    if (!h.date) return;
+    let to = null;
+    if (h.done) {
+      if (h.doneAt) { const d = ymd(new Date(h.doneAt)); if (d > h.date) to = d; }
+    } else if (h.date < today) {
+      to = today;
+    }
+    if (!to) return;
+    let d = shiftDate(h.date, 1);
+    if (d < start) d = start;
+    for (let i = 0; d <= to && i < 500; i++) { bad.add(d); d = shiftDate(d, 1); }
+  });
+  let streak = 0;
+  for (let d = today, i = 0; d >= start && !bad.has(d) && i < 500; d = shiftDate(d, -1), i++) streak++;
+  let best = 0;
+  let run = 0;
+  for (let d = start, i = 0; d <= today && i < 500; d = shiftDate(d, 1), i++) {
+    if (bad.has(d)) run = 0; else { run++; if (run > best) best = run; }
+  }
+  return { streak, best, lateNow: state.homework.filter(isLate).length };
+}
+
+function onTimeStats() {
+  const done = state.homework.filter((h) => h.done && h.date && h.doneAt);
+  const by = new Map();
+  let ok = 0;
+  done.forEach((h) => {
+    const good = ymd(new Date(h.doneAt)) <= h.date;
+    if (good) ok++;
+    const name = (h.subject || '').trim();
+    const k = name.toLowerCase();
+    if (!by.has(k)) by.set(k, { name, total: 0, ok: 0 });
+    const r = by.get(k);
+    r.total++;
+    if (good) r.ok++;
+  });
+  return { total: done.length, ok, rows: [...by.values()].sort((a, b) => b.total - a.total) };
+}
+
+function weekStats(n) {
+  const today = todayStr();
+  const mon = mondayOf(new Date());
+  const weeks = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const start = ymd(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() - 7 * i));
+    const end = shiftDate(start, 6);
+    const w = { start, ok: 0, late: 0, missed: 0, todo: 0 };
+    state.homework.forEach((h) => {
+      if (!h.date || h.date < start || h.date > end) return;
+      if (h.done) { if (h.doneAt && ymd(new Date(h.doneAt)) > h.date) w.late++; else w.ok++; }
+      else if (h.date < today) w.missed++;
+      else w.todo++;
+    });
+    w.total = w.ok + w.late + w.missed + w.todo;
+    weeks.push(w);
+  }
+  return weeks;
+}
+
+// Moyennes sur 20, pondérées par les coefficients, par matière
+function gradeStats() {
+  const by = new Map();
+  state.homework.forEach((h) => {
+    if (typeof h.grade !== 'number') return;
+    const max = h.gradeMax > 0 ? h.gradeMax : 20;
+    const coef = h.coef > 0 ? h.coef : 1;
+    const name = (h.subject || '').trim();
+    const k = name.toLowerCase();
+    if (!by.has(k)) by.set(k, { name, sum: 0, coef: 0, n: 0 });
+    const r = by.get(k);
+    r.sum += (h.grade / max) * 20 * coef;
+    r.coef += coef;
+    r.n++;
+  });
+  const rows = [...by.values()].map((r) => ({ name: r.name, n: r.n, avg: r.sum / r.coef })).sort((a, b) => b.avg - a.avg);
+  const general = rows.length ? rows.reduce((sum, r) => sum + r.avg, 0) / rows.length : null;
+  return { rows, general };
+}
+
+function pbar(ratio, cls) {
+  const track = el('div', 'pbar');
+  const fill = el('span', 'pfill ' + cls);
+  fill.style.width = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+  track.append(fill);
+  return track;
+}
+
+function statRow(name, ratio, cls, value) {
+  const row = el('div', 'st-row');
+  const label = el('span', 'st-name');
+  label.style.setProperty('--c', subjectColor(name));
+  label.append(el('span', 'dot'), name || 'Sans matière');
+  row.append(label, pbar(ratio, cls), el('span', 'st-val', value));
+  return row;
+}
+
+function statSection(title) {
+  const sec = el('section', 'st-sec');
+  sec.append(el('h3', null, title));
+  return sec;
+}
+
+function renderStats() {
+  const box = $('statsBody');
+  box.textContent = '';
+
+  // Série sans retard
+  const st = lateStreak();
+  const card = el('div', 'streak' + (st && st.streak > 0 ? '' : ' off'));
+  const num = el('div', 'streak-n');
+  const txt = el('div', 'streak-t');
+  if (!st) {
+    num.textContent = '—';
+    txt.append(el('strong', null, 'Série sans retard'), el('span', null, 'Ajoute des devoirs pour lancer ta série.'));
+  } else {
+    num.append(el('span', 'flame', st.streak > 0 ? '🔥' : '⏸'), String(st.streak));
+    txt.append(el('strong', null, st.streak > 0
+      ? `jour${st.streak > 1 ? 's' : ''} de suite sans devoir en retard`
+      : 'Série en pause'));
+    const sub = [];
+    if (st.lateNow > 0) sub.push(`${st.lateNow} devoir${st.lateNow > 1 ? 's' : ''} en retard : termine-${st.lateNow > 1 ? 'les' : 'le'} pour relancer la série.`);
+    sub.push(`Record : ${st.best} jour${st.best > 1 ? 's' : ''}`);
+    txt.append(el('span', null, sub.join(' ')));
+  }
+  card.append(num, txt);
+  box.append(card);
+
+  // Rendus à temps
+  const ot = onTimeStats();
+  const s1 = statSection('Rendus à temps');
+  if (!ot.total) {
+    s1.append(el('p', 'muted', 'Les statistiques apparaîtront quand tu auras terminé des devoirs qui ont une date.'));
+  } else {
+    const big = el('div', 'st-big');
+    big.append(el('strong', null, `${Math.round((ot.ok / ot.total) * 100)} %`), el('span', 'muted', `${ot.ok} sur ${ot.total} devoirs terminés à temps`));
+    s1.append(big, pbar(ot.ok / ot.total, 'ok'));
+    if (ot.rows.length > 1 || (ot.rows[0] && ot.rows[0].name)) {
+      const rows = el('div', 'st-rows');
+      ot.rows.forEach((r) => rows.append(statRow(r.name, r.ok / r.total, 'ok', `${Math.round((r.ok / r.total) * 100)} % · ${r.ok}/${r.total}`)));
+      s1.append(rows);
+    }
+  }
+  box.append(s1);
+
+  // Moyennes
+  const gs = gradeStats();
+  const s2 = statSection('Notes et moyennes');
+  if (!gs.rows.length) {
+    s2.append(el('p', 'muted', 'Choisis le type « Contrôle » ou « Exposé » dans un devoir, puis renseigne la note obtenue : les moyennes par matière s\'affichent ici.'));
+  } else {
+    const big = el('div', 'st-big');
+    big.append(el('strong', null, `${fmtNum(gs.general)}/20`), el('span', 'muted', 'moyenne générale (chaque matière compte autant)'));
+    s2.append(big);
+    const rows = el('div', 'st-rows');
+    gs.rows.forEach((r) => rows.append(statRow(r.name, r.avg / 20, 'avg', `${fmtNum(r.avg)}/20 · ${r.n} note${r.n > 1 ? 's' : ''}`)));
+    s2.append(rows);
+  }
+  box.append(s2);
+
+  // 8 dernières semaines
+  const weeks = weekStats(8);
+  const maxTotal = Math.max(1, ...weeks.map((w) => w.total));
+  const s3 = statSection('8 dernières semaines');
+  const rows = el('div', 'st-rows');
+  weeks.forEach((w) => {
+    const row = el('div', 'st-row');
+    const label = parseDate(w.start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    row.append(el('span', 'st-name plain', `Sem. du ${label}`));
+    const track = el('div', 'pbar wk');
+    const stack = el('div', 'wstack');
+    stack.style.width = `${(w.total / maxTotal) * 100}%`;
+    [['ok', w.ok], ['late', w.late], ['missed', w.missed], ['todo', w.todo]].forEach(([cls, n]) => {
+      if (!n) return;
+      const seg = el('span', 'pfill ' + cls);
+      seg.style.flexGrow = String(n);
+      stack.append(seg);
+    });
+    track.append(stack);
+    row.append(track, el('span', 'st-val', w.total ? String(w.total) : '—'));
+    row.title = `${w.total} devoir${w.total > 1 ? 's' : ''} : ${w.ok} à temps, ${w.late} rendu${w.late > 1 ? 's' : ''} en retard, ${w.missed} non rendu${w.missed > 1 ? 's' : ''}, ${w.todo} à venir`;
+    rows.append(row);
+  });
+  s3.append(rows);
+  const legend = el('div', 'legend');
+  [['ok', 'À temps'], ['late', 'Rendu en retard'], ['missed', 'Non rendu'], ['todo', 'À venir']].forEach(([cls, text]) => {
+    const l = el('span');
+    l.append(el('i', 'pfill ' + cls), text);
+    legend.append(l);
+  });
+  s3.append(legend);
+  box.append(s3);
+}
+
+function openStats() {
+  renderStats();
+  if (!$('statsDialog').open) $('statsDialog').showModal();
+}
+$('statsBtn').addEventListener('click', openStats);
+$('stClose').addEventListener('click', () => $('statsDialog').close());
+$('stOk').addEventListener('click', () => $('statsDialog').close());
+
+// ---------- Imprimer / PDF ----------
+let printRange = 'week';
+
+function printData() {
+  const mon = ymd(mondayOf(new Date()));
+  const incDone = $('p-done').checked;
+  let from = null;
+  let to = null;
+  let title = 'Devoirs à faire';
+  if (printRange === 'week') { from = mon; to = shiftDate(mon, 6); title = 'Devoirs de la semaine'; }
+  if (printRange === 'next') { from = shiftDate(mon, 7); to = shiftDate(mon, 13); title = 'Devoirs de la semaine prochaine'; }
+  const rank = (h) => (!h.date ? 2 : (from && h.date < from ? 0 : 1));
+  const items = state.homework.filter((h) => {
+    if (printRange === 'todo') return !h.done;
+    if (h.done && !incDone) return false;
+    if (!h.date) return false;
+    if (h.date >= from && h.date <= to) return true;
+    return printRange === 'week' && !h.done && h.date < from; // devoirs en retard
+  }).sort((a, b) => (rank(a) - rank(b)) || (a.date || '').localeCompare(b.date || '') || ((b.priority || 1) - (a.priority || 1)) || a.title.localeCompare(b.title, 'fr'));
+  return { items, from, to, title, mon, rank };
+}
+
+function longDate(str, withYear) {
+  return parseDate(str).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' } : {}) });
+}
+
+function buildPrintSheet() {
+  const sheet = $('printSheet');
+  sheet.textContent = '';
+  const { items, from, to, title, rank } = printData();
+  sheet.append(el('h1', null, title));
+  const period = from
+    ? `Du ${longDate(from)} au ${longDate(to, true)}`
+    : `Au ${longDate(todayStr(), true)}`;
+  sheet.append(el('p', 'ps-sub', period));
+
+  let lastKey = null;
+  let ul = null;
+  items.forEach((h) => {
+    const r = rank(h);
+    const key = r === 0 ? 'late' : r === 2 ? 'none' : h.date;
+    if (key !== lastKey) {
+      lastKey = key;
+      sheet.append(el('h2', 'ps-day' + (r === 0 ? ' late' : ''), r === 0 ? 'En retard' : r === 2 ? 'Sans date' : longDate(h.date).replace(/^./, (c) => c.toUpperCase())));
+      ul = el('ul', 'ps-list');
+      sheet.append(ul);
+      if (r === 1) {
+        const classes = classesOn(h.date);
+        if (classes.length) sheet.lastChild.before(el('p', 'ps-classes', 'Cours : ' + classes.join(', ')));
+      }
+    }
+    const li = el('li', 'ps-item');
+    li.append(el('span', 'ps-box', h.done ? '✓' : ''));
+    const main = el('div', 'ps-main');
+    const line = el('div', 'ps-line');
+    if (h.subject) {
+      const sub = el('span', 'ps-subject', h.subject);
+      sub.style.setProperty('--c', subjectColor(h.subject));
+      line.append(sub);
+    }
+    line.append(el('strong', null, h.title));
+    const bits = [];
+    if (KINDS[h.kind]) bits.push(`${KINDS[h.kind].emoji} ${KINDS[h.kind].label}`);
+    if (h.minutes) bits.push(fmtMinutes(h.minutes));
+    if (h.priority > 1) bits.push(PRIORITY_LABELS[h.priority]);
+    if (typeof h.grade === 'number') bits.push(`Note ${fmtNum(h.grade)}/${fmtNum(h.gradeMax > 0 ? h.gradeMax : 20)}`);
+    if (bits.length) line.append(el('span', 'ps-meta', bits.join(' · ')));
+    main.append(line);
+    if (h.notes) main.append(el('div', 'ps-notes', h.notes));
+    if ((h.subtasks || []).length) {
+      const subs = el('ul', 'ps-subs');
+      h.subtasks.forEach((t) => {
+        const sli = el('li');
+        sli.append(el('span', 'ps-box small', t.done ? '✓' : ''), t.text);
+        subs.append(sli);
+      });
+      main.append(subs);
+    }
+    li.append(main);
+    ul.append(li);
+  });
+  if (!items.length) sheet.append(el('p', 'ps-empty', 'Aucun devoir pour cette période.'));
+
+  const mins = items.reduce((sum, h) => sum + (h.done ? 0 : (h.minutes || 0)), 0);
+  sheet.append(el('p', 'ps-foot', `${items.length} devoir${items.length > 1 ? 's' : ''}${mins ? ` · temps de travail estimé : ${fmtMinutes(mins)}` : ''} · Imprimé le ${longDate(todayStr(), true)} avec Mes Devoirs`));
+  return items.length;
+}
+
+function updatePrintDialog() {
+  document.querySelectorAll('#p-range button').forEach((b) => {
+    const on = b.dataset.value === printRange;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  $('p-done').disabled = printRange === 'todo';
+  const n = buildPrintSheet();
+  $('p-count').textContent = n ? `${n} devoir${n > 1 ? 's' : ''} ${n > 1 ? 'seront imprimés' : 'sera imprimé'}.` : 'Aucun devoir pour cette période.';
+  $('pPrint').disabled = n === 0;
+  $('pPdf').disabled = n === 0;
+}
+
+function openPrint() {
+  updatePrintDialog();
+  if (!$('printDialog').open) $('printDialog').showModal();
+}
+
+$('printBtn').addEventListener('click', openPrint);
+$('pClose').addEventListener('click', () => $('printDialog').close());
+$('pCancel').addEventListener('click', () => $('printDialog').close());
+$('p-range').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-value]');
+  if (b) { printRange = b.dataset.value; updatePrintDialog(); }
+});
+$('p-done').addEventListener('change', updatePrintDialog);
+$('pPrint').addEventListener('click', async () => {
+  buildPrintSheet();
+  const r = await window.devoirsAPI.printPage();
+  if (r && !r.ok && !/cancel/i.test(r.reason || '')) showToast("L'impression n'a pas pu démarrer.");
+});
+$('pPdf').addEventListener('click', async () => {
+  buildPrintSheet();
+  const { mon } = printData();
+  const name = printRange === 'todo' ? `MesDevoirs-a-faire-${todayStr()}.pdf` : `MesDevoirs-semaine-${printRange === 'next' ? shiftDate(mon, 7) : mon}.pdf`;
+  const r = await window.devoirsAPI.savePdf(name);
+  if (r && r.ok) showToast('PDF enregistré.');
+  else if (!r || !r.canceled) showToast("Impossible d'enregistrer le PDF.");
+});
+
 // ---------- Raccourcis clavier ----------
 const SHORTCUTS = [
   ['Général', [
@@ -1863,12 +2325,14 @@ const SHORTCUTS = [
     ['Ctrl+F|/', 'Rechercher'],
     ['Échap', 'Fermer la fenêtre ouverte, vider la recherche'],
     ['Ctrl+,', 'Paramètres'],
+    ['Ctrl+P', 'Imprimer ou enregistrer en PDF'],
+    ['Ctrl+I', 'Statistiques'],
     ['Ctrl+Maj+D', 'Changer de thème'],
     ['Ctrl+Z', 'Annuler la dernière suppression ou le dernier déplacement'],
     ['F1|?', 'Afficher cette aide'],
   ]],
   ['Navigation', [
-    ['1 à 5', 'À faire · En retard · Cette semaine · Terminés · Tous'],
+    ['1 à 6', "Aujourd'hui · À faire · En retard · Cette semaine · Terminés · Tous"],
     ['L', 'Vue liste'],
     ['C', 'Vue calendrier'],
   ]],
@@ -1937,6 +2401,8 @@ document.addEventListener('keydown', (e) => {
     else if (key === 'f' && !e.shiftKey) { e.preventDefault(); $('search').focus(); $('search').select(); }
     else if (e.key === ',' || e.code === 'Comma') { e.preventDefault(); openSettings('appearance'); }
     else if (key === 'd' && e.shiftKey) { e.preventDefault(); $('themeBtn').click(); }
+    else if (key === 'p' && !e.shiftKey) { e.preventDefault(); openPrint(); }
+    else if (key === 'i' && !e.shiftKey) { e.preventDefault(); openStats(); }
     else if (key === 'z' && !e.shiftKey && !isTyping(e.target)) { if (undoLast()) e.preventDefault(); }
     return;
   }
@@ -1955,10 +2421,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '/') { e.preventDefault(); $('search').focus(); return; }
 
   // Chiffres : on lit la touche physique (sur un clavier AZERTY, « 1 » sans Maj donne « & »)
-  const digit = /^(?:Digit|Numpad)([1-5])$/.exec(e.code || '');
+  const digit = /^(?:Digit|Numpad)([1-6])$/.exec(e.code || '');
   if (digit && !e.shiftKey) {
     e.preventDefault();
-    const f = ['todo', 'late', 'week', 'done', 'all'][Number(digit[1]) - 1];
+    const f = ['today', 'todo', 'late', 'week', 'done', 'all'][Number(digit[1]) - 1];
     document.querySelector(`#filters button[data-filter="${f}"]`).click();
     return;
   }
@@ -1996,7 +2462,8 @@ window.addEventListener('focus', checkDayChange);
   if (Array.isArray(state.settings.subjects)) {
     state.settings.subjects = state.settings.subjects
       .filter((s) => s && typeof s.name === 'string' && s.name.trim())
-      .map((s) => ({ id: s.id || uid(), name: s.name.trim(), color: typeof s.color === 'string' && /^#[0-9a-f]{6}$/i.test(s.color) ? s.color : NEUTRAL }));
+      .map((s) => ({ id: s.id || uid(), name: s.name.trim(), color: typeof s.color === 'string' && /^#[0-9a-f]{6}$/i.test(s.color) ? s.color : NEUTRAL,
+        days: Array.isArray(s.days) ? [...new Set(s.days.map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort() : [] }));
   } else {
     state.settings.subjects = buildInitialSubjects(state.homework);
     persist();

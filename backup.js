@@ -14,7 +14,7 @@ const MAX_SUBJECTS = 200;
 const THEMES = ['light', 'dark', 'auto'];
 const ACCENTS = ['indigo', 'violet', 'rose', 'rouge', 'orange', 'vert', 'turquoise', 'bleu'];
 const SORTS = ['date', 'priority', 'subject', 'created'];
-const FILTERS = ['todo', 'late', 'week', 'done', 'all'];
+const FILTERS = ['today', 'todo', 'late', 'week', 'done', 'all'];
 const COLOR = /^#[0-9a-f]{6}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -94,6 +94,15 @@ function sanitizeHomework(list) {
     if (subtasks.length) item.subtasks = subtasks;
     const attachments = sanitizeAttachments(h.attachments);
     if (attachments.length) item.attachments = attachments;
+    // Note (contrôles et exposés) : sur combien et coefficient
+    const grade = num(h.grade);
+    if (grade !== null && grade >= 0 && grade <= 1000) {
+      item.grade = Math.round(grade * 100) / 100;
+      const max = num(h.gradeMax);
+      item.gradeMax = max !== null && max > 0 && max <= 1000 ? Math.round(max * 100) / 100 : 20;
+      const coef = num(h.coef);
+      item.coef = coef !== null && coef > 0 && coef <= 100 ? Math.round(coef * 100) / 100 : 1;
+    }
     out.push(item);
   });
   return out;
@@ -107,11 +116,15 @@ function sanitizeSubjects(list) {
     const name = str(s.name, 60).replace(/\s+/g, ' ');
     if (!name || seen.has(key(name))) return;
     seen.add(key(name));
-    out.push({
+    const item = {
       id: str(s.id, 64) || uid(),
       name,
       color: typeof s.color === 'string' && COLOR.test(s.color) ? s.color : '#8b93a7',
-    });
+    };
+    // Jours de cours (1 = lundi … 7 = dimanche) : emploi du temps
+    const days = [...new Set((Array.isArray(s.days) ? s.days : []).map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort();
+    if (days.length) item.days = days;
+    out.push(item);
   });
   return out;
 }

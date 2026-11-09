@@ -274,6 +274,31 @@ ipcMain.handle('backup:apply', (_e, current, options) => {
 
 ipcMain.handle('backup:cancel', () => { pendingImport = null; return true; });
 
+// ---------- Impression et PDF ----------
+// La page se met en forme toute seule pour l'impression (feuille « #printSheet » dans la feuille de style)
+ipcMain.handle('print:run', (e) => new Promise((resolve) => {
+  try {
+    e.sender.print({ printBackground: true }, (ok, reason) => resolve({ ok: !!ok, reason: String(reason || '') }));
+  } catch (err) { resolve({ ok: false, reason: 'error' }); }
+}));
+
+ipcMain.handle('print:pdf', async (e, name) => {
+  const win = BrowserWindow.fromWebContents(e.sender) || undefined;
+  let base = String(name || 'MesDevoirs.pdf').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80);
+  if (!/\.pdf$/i.test(base)) base += '.pdf';
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Enregistrer en PDF',
+    defaultPath: path.join(app.getPath('documents'), base),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    const buf = await e.sender.printToPDF({ printBackground: true, pageSize: 'A4' });
+    fs.writeFileSync(r.filePath, buf);
+    return { ok: true, path: r.filePath };
+  } catch (err) { return { ok: false }; }
+});
+
 // ---------- Fichiers joints et liens ----------
 // Types de fichiers qu'on refuse d'ouvrir depuis l'appli (un fichier de données importé pourrait y pointer)
 const UNSAFE_EXT = new Set([

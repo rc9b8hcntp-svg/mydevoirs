@@ -18,6 +18,7 @@
       <button class="primary big" id="newBtn" title="Nouveau devoir (Ctrl+N)"><span class="ico" data-icon="plus"></span>Nouveau devoir</button>
 
       <nav class="filters" id="filters">
+        <button data-filter="today"><span class="ico" data-icon="sun"></span><span class="lbl">Aujourd'hui</span><span class="count" id="c-today">0</span></button>
         <button data-filter="todo" class="active"><span class="ico" data-icon="circle"></span><span class="lbl">À faire</span><span class="count" id="c-todo">0</span></button>
         <button data-filter="late"><span class="ico" data-icon="alert"></span><span class="lbl">En retard</span><span class="count" id="c-late">0</span></button>
         <button data-filter="week"><span class="ico" data-icon="calendar"></span><span class="lbl">Cette semaine</span><span class="count" id="c-week">0</span></button>
@@ -51,6 +52,8 @@
             <button data-view="list"><span class="ico" data-icon="list"></span>Liste</button>
             <button data-view="calendar"><span class="ico" data-icon="calendar"></span>Calendrier</button>
           </div>
+          <button class="icon-btn" id="statsBtn" title="Statistiques (Ctrl+I)" aria-label="Statistiques"><span class="ico" data-icon="chart"></span></button>
+          <button class="icon-btn" id="printBtn" title="Imprimer ou enregistrer en PDF (Ctrl+P)" aria-label="Imprimer"><span class="ico" data-icon="printer"></span></button>
           <button class="icon-btn" id="themeBtn" title="Changer de thème (Ctrl+Maj+D)" aria-label="Changer de thème"><span class="ico" data-icon="moon"></span></button>
         </div>
       </header>
@@ -118,6 +121,7 @@
       <div class="field">
         <span class="flabel">Matière</span>
         <div id="f-subjects" class="chips"></div>
+        <p class="hint" id="f-subject-hint" hidden></p>
 
         <div id="quickAdd" class="quick" hidden>
           <input type="text" id="qa-name" maxlength="30" placeholder="Nom de la nouvelle matière">
@@ -145,6 +149,17 @@
             <button type="button" data-value="3">Urgente</button>
           </div>
         </div>
+      </div>
+
+      <div class="field" id="f-grade-box" hidden>
+        <span class="flabel">Note obtenue</span>
+        <div class="grade-line">
+          <input type="number" id="f-grade" min="0" max="1000" step="0.25" inputmode="decimal" placeholder="—" aria-label="Note obtenue">
+          <span>/</span>
+          <input type="number" id="f-grade-max" min="1" max="1000" step="1" inputmode="decimal" placeholder="20" aria-label="Note maximale">
+          <label class="coef">Coef.<input type="number" id="f-coef" min="0" max="100" step="0.5" inputmode="decimal" placeholder="1" aria-label="Coefficient"></label>
+        </div>
+        <span class="hint">Laisse vide tant que tu n'as pas la note. Elle compte dans la moyenne de la matière (Statistiques).</span>
       </div>
 
       <div class="row">
@@ -212,6 +227,41 @@
     </div>
   </dialog>
 
+  <!-- Statistiques -->
+  <dialog id="statsDialog" class="view statsdlg">
+    <div class="dlg-head">
+      <h2>Statistiques</h2>
+      <button type="button" class="icon-btn tiny" id="stClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div id="statsBody" class="stats-body"></div>
+    <div class="actions"><button type="button" class="primary" id="stOk">OK</button></div>
+  </dialog>
+
+  <!-- Imprimer / PDF -->
+  <dialog id="printDialog" class="view">
+    <div class="dlg-head">
+      <h2>Imprimer ou enregistrer en PDF</h2>
+      <button type="button" class="icon-btn tiny" id="pClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div class="v-body print-opts">
+      <div class="field">
+        <span class="flabel">Période</span>
+        <div class="seg" id="p-range" role="radiogroup" aria-label="Période">
+          <button type="button" data-value="week">Cette semaine</button>
+          <button type="button" data-value="next">Semaine suivante</button>
+          <button type="button" data-value="todo">Tout ce qui reste</button>
+        </div>
+      </div>
+      <label class="check-line"><input type="checkbox" id="p-done"> Inclure les devoirs terminés</label>
+      <p class="hint" id="p-count"></p>
+    </div>
+    <div class="actions">
+      <button type="button" class="ghost" id="pCancel">Fermer</button>
+      <button type="button" class="ghost" id="pPdf"><span class="ico" data-icon="download"></span>Enregistrer en PDF</button>
+      <button type="button" class="primary" id="pPrint"><span class="ico" data-icon="printer"></span>Imprimer</button>
+    </div>
+  </dialog>
+
   <!-- Aide : raccourcis clavier -->
   <dialog id="helpDialog" class="view help">
     <div class="dlg-head">
@@ -229,6 +279,7 @@
         <h2>Paramètres</h2>
         <button data-tab="appearance" class="active"><span class="ico" data-icon="palette"></span>Apparence</button>
         <button data-tab="subjects"><span class="ico" data-icon="book"></span>Matières</button>
+        <button data-tab="schedule"><span class="ico" data-icon="clock"></span>Emploi du temps</button>
         <button data-tab="homework"><span class="ico" data-icon="sliders"></span>Devoirs</button>
         <button data-tab="notifications"><span class="ico" data-icon="bell"></span>Notifications</button>
         <button data-tab="backup"><span class="ico" data-icon="save"></span>Sauvegarde</button>
@@ -278,6 +329,13 @@
           <button class="ghost small" id="s-restore"><span class="ico" data-icon="rotate"></span>Remettre les matières par défaut</button>
         </section>
 
+        <!-- Emploi du temps -->
+        <section data-panel="schedule" hidden>
+          <h3 class="set-title">Emploi du temps</h3>
+          <p class="hint top">Coche les jours où tu as cours dans chaque matière. En créant un devoir pour un jour donné, l'application te propose les matières de ce jour-là, et la page « Aujourd'hui » affiche tes cours.</p>
+          <div id="s-schedule" class="sched"></div>
+        </section>
+
         <!-- Devoirs -->
         <section data-panel="homework" hidden>
           <h3 class="set-title">Devoirs</h3>
@@ -285,6 +343,7 @@
           <div class="setting">
             <div class="desc">Page affichée au démarrage<small>La liste ouverte quand tu lances l'application.</small></div>
             <select id="s-start" aria-label="Page affichée au démarrage">
+              <option value="today">Aujourd'hui</option>
               <option value="todo">À faire</option>
               <option value="late">En retard</option>
               <option value="week">Cette semaine</option>
@@ -470,6 +529,8 @@
     <span id="toast-text"></span>
     <button type="button" id="toast-btn" class="toast-btn" hidden></button>
   </div>
+  <!-- Feuille mise en page uniquement pour l'impression -->
+  <div id="printSheet" class="print-sheet" aria-hidden="true"></div>
   <script src="renderer.js"></script>
 </body>
 </html>
