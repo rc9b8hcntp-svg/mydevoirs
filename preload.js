@@ -19,14 +19,6 @@ contextBridge.exposeInMainWorld('devoirsAPI', {
   pickFiles: () => ipcRenderer.invoke('file:pick'),
   openFile: (filePath) => ipcRenderer.invoke('file:open', filePath),
   openLink: (url) => ipcRenderer.invoke('link:open', url),
-  syncPick: () => ipcRenderer.invoke('sync:pick'),
-  syncNow: () => ipcRenderer.invoke('sync:now'),
-  syncStatus: () => ipcRenderer.invoke('sync:status'),
-  importSchedule: () => ipcRenderer.invoke('schedule:import'),
-  toggleWidget: (force) => ipcRenderer.invoke('widget:toggle', force),
-  widgetState: () => ipcRenderer.invoke('widget:state'),
-  // Le mini-widget demande d'ouvrir le formulaire « Nouveau devoir »
-  onNewRequest: (cb) => ipcRenderer.on('app:new', () => cb()),
   // Appelé quand l'utilisateur clique sur une notification (reçoit le filtre à afficher)
   // Les boutons d'une notification ont modifié les devoirs : reçoit la nouvelle liste
   onDataChanged: (cb) => ipcRenderer.on('data:changed', (_e, homework) => cb(homework)),

@@ -1,21 +1,13 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, Notification, Tray, nativeImage, dialog, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, Notification, Tray, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const { checkForUpdate, listReleases } = require('./updater');
 const { downloadFile } = require('./downloader');
 const {
   normalizeSettings, buildDigest, isDue, ymd, isPaused, isDueAt, buildMorning, buildReminder,
-  dueTomorrow, actionUrl, parseActionUrl, buildToastXml, daysUntil,
+  dueTomorrow, actionUrl, parseActionUrl, buildToastXml,
 } = require('./notifier');
 const backup = require('./backup');
-const sync = require('./sync');
-const { parseSchedule } = require('./schedule-import');
-const i18n = require('./src/i18n');
-
-// Langue de l'interface (aussi pour les notifications et les menus) : « fr » ou « en »
-let uiLang = 'fr';
-const T = (text) => i18n.tr(text, uiLang);
 
 // Nécessaire pour que Windows affiche correctement les notifications de l'appli
 app.setAppUserModelId('fr.maxence.mesdevoirs');
@@ -27,9 +19,9 @@ const notifStateFile = () => path.join(app.getPath('userData'), 'notifications-s
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
-let lastAsset = null;   // installeur (.msi) correspondant à ce PC, trouvé par la dernière recherche de mise à jour
+let lastAsset = null;   // installeur (.msi sous Windows, .dmg sous macOS) correspondant à ce PC, trouvé par la dernière recherche de mise à jour
 let downloading = false;
-const ASSET_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[^/\s]+\/[\w.+-]+\.msi$/i;
+const ASSET_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[^/\s]+\/[\w.+-]+\.(?:msi|dmg)$/i;
 const liveNotifications = new Set(); // évite que Windows/Electron les « oublie » avant le clic
 
 // ---------- Données ----------
@@ -37,16 +29,12 @@ function readData() {
   try {
     const raw = fs.readFileSync(dataFile(), 'utf8');
     const parsed = JSON.parse(raw);
-    const data = {
+    return {
       homework: Array.isArray(parsed.homework) ? parsed.homework : [],
-      trash: Array.isArray(parsed.trash) ? parsed.trash : [],
-      archive: Array.isArray(parsed.archive) ? parsed.archive : [],
       settings: parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {},
     };
-    uiLang = data.settings.language === 'en' ? 'en' : 'fr';
-    return data;
   } catch (e) {
-    return { homework: [], trash: [], archive: [], settings: {} };
+    return { homework: [], settings: {} };
   }
 }
 
@@ -58,13 +46,7 @@ function writeJson(file, data) {
 }
 
 function writeData(data) {
-  writeJson(dataFile(), {
-    homework: Array.isArray(data.homework) ? data.homework : [],
-    trash: Array.isArray(data.trash) ? data.trash : [],
-    archive: Array.isArray(data.archive) ? data.archive : [],
-    settings: data.settings && typeof data.settings === 'object' ? data.settings : {},
-  });
-  uiLang = data.settings && data.settings.language === 'en' ? 'en' : 'fr';
+  writeJson(dataFile(), data);
 }
 
 // État interne des notifications (dernier rappel envoyé…), séparé des données de l'utilisateur
@@ -131,21 +113,16 @@ function showWindow() {
 // ---------- Zone de notification (tray) ----------
 function ensureTray() {
   if (tray) return;
-  const img = nativeImage.createFromPath(ICON_PATH).resize({ width: 16, height: 16 });
+  const size = process.platform === 'darwin' ? 18 : 16; // barre des menus du Mac : un peu plus grand
+  const img = nativeImage.createFromPath(ICON_PATH).resize({ width: size, height: size });
   tray = new Tray(img);
   tray.setToolTip('Mes Devoirs');
-  refreshTrayMenu();
-  tray.on('click', showWindow);
-}
-
-function refreshTrayMenu() {
-  if (!tray) return;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: T('Ouvrir Mes Devoirs'), click: showWindow },
-    { label: T('Mini-widget'), click: () => toggleWidget() },
+    { label: 'Ouvrir Mes Devoirs', click: showWindow },
     { type: 'separator' },
-    { label: T('Quitter'), click: () => { isQuitting = true; app.quit(); } },
+    { label: 'Quitter', click: () => { isQuitting = true; app.quit(); } },
   ]));
+  tray.on('click', showWindow);
 }
 
 function destroyTray() {
@@ -167,16 +144,14 @@ function applySystemSettings(settings) {
 function notify({ title, body, filter, homeworkId }) {
   if (!Notification.isSupported()) return false;
   const s = notifSettings();
-  title = T(title);
-  body = T(body);
   const opts = { title, body, icon: ICON_PATH, silent: s.sound === 'silent' };
   if (process.platform === 'win32') {
     // 12 : boutons dans la notification (ils relancent l'appli en douce via mesdevoirs://…, sans ouvrir la fenêtre)
     // 15 : son au choix ou silence
     const actions = s.actions && homeworkId
       ? [
-        { label: T('Marquer fait'), url: actionUrl('done', homeworkId) },
-        { label: T('Rappeler demain'), url: actionUrl('snooze', homeworkId) },
+        { label: 'Marquer fait', url: actionUrl('done', homeworkId) },
+        { label: 'Rappeler demain', url: actionUrl('snooze', homeworkId) },
       ]
       : [];
     opts.toastXml = buildToastXml({ title, body, sound: s.sound, actions });
@@ -261,105 +236,18 @@ function tick() {
   } catch (e) { /* on réessaiera au prochain passage */ }
 }
 
-// ---------- Synchronisation par dossier ----------
-const syncState = { lastSync: 0, lastError: '', remoteMtime: 0 };
-const syncFilePath = (settings) => {
-  const f = settings && settings.syncFolder;
-  return typeof f === 'string' && f ? path.join(f, sync.FILE_NAME) : null;
-};
-const syncView = (d) => ({
-  homework: d.homework, trash: d.trash, archive: d.archive,
-  subjects: (d.settings && d.settings.subjects) || [], templates: (d.settings && d.settings.templates) || [],
-});
-
-// Fusionne l'état local avec le fichier du dossier partagé (et l'écrit si besoin).
-// Renvoie { data, changedLocal, ok, error }.
-function runSync(data) {
-  const file = syncFilePath(data.settings);
-  if (!file) return { data, changedLocal: false, ok: false, disabled: true };
-  try {
-    let remote = { homework: [], trash: [], archive: [], subjects: [], templates: [] };
-    let exists = false;
-    if (fs.existsSync(file)) {
-      const parsed = sync.parseSyncFile(fs.readFileSync(file, 'utf8'));
-      if (!parsed.ok) { syncState.lastError = parsed.reason; return { data, changedLocal: false, ok: false, error: parsed.reason }; } // on n'écrase jamais un fichier qu'on ne comprend pas
-      remote = parsed.data;
-      exists = true;
-    }
-    const r = sync.mergeData(syncView(data), remote);
-    let out = data;
-    if (r.changedLocal) {
-      out = Object.assign({}, data, {
-        homework: r.merged.homework, trash: r.merged.trash, archive: r.merged.archive,
-        settings: Object.assign({}, data.settings, { subjects: r.merged.subjects, templates: r.merged.templates }),
-      });
-    }
-    if (r.changedRemote || !exists) writeJson(file, sync.buildSyncFile(syncView(out), os.hostname()));
-    syncState.lastSync = Date.now();
-    syncState.lastError = '';
-    try { syncState.remoteMtime = fs.statSync(file).mtimeMs; } catch (e) { /* pas grave */ }
-    return { data: out, changedLocal: r.changedLocal, ok: true };
-  } catch (e) {
-    syncState.lastError = 'access';
-    return { data, changedLocal: false, ok: false, error: 'access' };
-  }
-}
-
-// Ce que l'interface reçoit quand les données changent en dehors d'elle (synchro, notification, widget)
-function pushToMain(data) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('data:changed', {
-      homework: data.homework, trash: data.trash, archive: data.archive,
-      subjects: data.settings.subjects || null, templates: data.settings.templates || null,
-    });
-  }
-}
-
-// Enregistre un changement venu de l'extérieur de la fenêtre (bouton de notification, widget) puis met tout à jour
-function commit(data) {
-  writeData(data);
-  const r = runSync(data);
-  const final = r.changedLocal ? r.data : data;
-  if (r.changedLocal) writeData(final);
-  pushToMain(final);
-  refreshWidget();
-}
-
-// Vérifie de temps en temps si l'autre ordinateur a modifié le fichier partagé
-function syncPoll() {
-  try {
-    const d = readData();
-    const file = syncFilePath(d.settings);
-    if (!file) return;
-    let m = 0;
-    try { m = fs.statSync(file).mtimeMs; } catch (e) { return; }
-    if (m === syncState.remoteMtime) return;
-    const r = runSync(d);
-    if (r.changedLocal) { writeData(r.data); pushToMain(r.data); refreshWidget(); }
-  } catch (e) { /* réessaiera */ }
-}
-
 // 12. Actions des boutons de notification (mesdevoirs://done/ID ou mesdevoirs://snooze/ID)
-function markDone(data, id, done) {
-  const h = data.homework.find((x) => x && x.id === id);
-  if (!h || !!h.done === done) return false;
-  h.done = done;
-  h.doneAt = done ? Date.now() : null;
-  h.updatedAt = Date.now();
-  if (done && h.repeat && h.date) h.pendingSpawn = true; // l'appli créera le prochain devoir à sa prochaine ouverture
-  if (!done && h.spawned) {
-    const n = data.homework.find((x) => x.id === h.spawned);
-    if (n && !n.done) data.homework = data.homework.filter((x) => x !== n);
-    delete h.spawned;
-  }
-  return true;
-}
-
 function handleAction({ action, id }) {
   try {
     const data = readData();
     if (action === 'done') {
-      if (markDone(data, id, true)) commit(data);
+      const h = data.homework.find((x) => x && x.id === id);
+      if (!h || h.done) return;
+      h.done = true;
+      h.doneAt = Date.now();
+      if (h.repeat && h.date) h.pendingSpawn = true; // l'appli créera le prochain devoir à sa prochaine ouverture
+      writeData(data);
+      if (mainWindow) mainWindow.webContents.send('data:changed', data.homework);
     } else if (action === 'snooze') {
       const s = notifSettings();
       const when = new Date();
@@ -373,197 +261,19 @@ function handleAction({ action, id }) {
   } catch (e) { /* ignoré */ }
 }
 
-// ---------- Mini-widget (petite fenêtre toujours visible) ----------
-let widgetWin = null;
-const widgetStateFile = () => path.join(app.getPath('userData'), 'widget-state.json');
-function readWidgetState() {
-  try { const s = JSON.parse(fs.readFileSync(widgetStateFile(), 'utf8')); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; }
-}
-function writeWidgetState(patch) {
-  try { writeJson(widgetStateFile(), Object.assign(readWidgetState(), patch)); } catch (e) { /* pas grave */ }
-}
-
-function widgetBoundsOk(b) {
-  if (!b || ![b.x, b.y, b.width, b.height].every(Number.isFinite)) return false;
-  return screen.getAllDisplays().some((d) => {
-    const a = d.workArea;
-    return b.x + 60 < a.x + a.width && b.x + b.width - 60 > a.x && b.y + 30 < a.y + a.height && b.y + 30 > a.y;
-  });
-}
-
-function createWidget() {
-  if (widgetWin) { widgetWin.show(); return widgetWin; }
-  const st = readWidgetState();
-  const b = widgetBoundsOk(st.bounds) ? st.bounds : null;
-  const area = screen.getPrimaryDisplay().workArea;
-  const size = { width: 300, height: 420 };
-  const win = new BrowserWindow({
-    width: b ? b.width : size.width,
-    height: b ? b.height : size.height,
-    x: b ? b.x : area.x + area.width - size.width - 24,
-    y: b ? b.y : area.y + 24,
-    minWidth: 230,
-    minHeight: 160,
-    frame: false,
-    resizable: true,
-    skipTaskbar: true,
-    alwaysOnTop: st.pinned !== false,
-    show: false,
-    title: 'Mes Devoirs · widget',
-    backgroundColor: '#1a1d27',
-    icon: ICON_PATH,
-    webPreferences: { preload: path.join(__dirname, 'widget-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
-  });
-  win.setMenuBarVisibility(false);
-  win.loadFile(path.join(__dirname, 'src', 'widget.html'));
-  win.once('ready-to-show', () => win.showInactive());
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  win.webContents.on('will-navigate', (e) => e.preventDefault());
-  let t = null;
-  const saveBounds = () => { clearTimeout(t); t = setTimeout(() => { if (!win.isDestroyed()) writeWidgetState({ bounds: win.getBounds() }); }, 400); };
-  win.on('moved', saveBounds);
-  win.on('resized', saveBounds);
-  win.on('closed', () => { clearTimeout(t); widgetWin = null; });
-  widgetWin = win;
-  return win;
-}
-
-function toggleWidget(force) {
-  const want = typeof force === 'boolean' ? force : !widgetWin;
-  if (want) createWidget(); else if (widgetWin) widgetWin.close();
-  return !!widgetWin;
-}
-
-function refreshWidget() {
-  if (widgetWin && !widgetWin.isDestroyed()) widgetWin.webContents.send('widget:refresh');
-}
-
-// Ce que le widget a le droit de voir. Avec un code de verrouillage, il n'affiche que des nombres.
-function widgetPayload() {
-  const d = readData();
-  const s = d.settings;
-  const now = new Date();
-  const locked = !!(s.lock && s.lock.hash);
-  const open = d.homework.filter((h) => h && !h.done && h.title);
-  const days = (h) => (h.date ? daysUntil(h.date, now) : null);
-  const base = {
-    locked,
-    language: uiLang,
-    theme: s.theme || 'light',
-    accent: s.accent || 'indigo',
-    compact: !!s.compact,
-    pinned: readWidgetState().pinned !== false,
-    counts: {
-      late: open.filter((h) => days(h) !== null && days(h) < 0).length,
-      today: open.filter((h) => days(h) === 0).length,
-      tomorrow: open.filter((h) => days(h) === 1).length,
-    },
-  };
-  if (locked) return Object.assign(base, { items: [], subjects: [] });
-  return Object.assign(base, {
-    subjects: (s.subjects || []).map((x) => ({ name: x.name, color: x.color })),
-    items: open.filter((h) => days(h) !== null && days(h) <= 1).slice(0, 60).map((h) => ({
-      id: h.id, title: String(h.title).slice(0, 200), subject: h.subject || '', date: h.date, priority: h.priority || 1, kind: h.kind || '', minutes: h.minutes || 0,
-      subtasks: (h.subtasks || []).length, subtasksDone: (h.subtasks || []).filter((x) => x.done).length,
-    })),
-  });
-}
-
-ipcMain.handle('widget:load', () => widgetPayload());
-ipcMain.handle('widget:done', (_e, id, done) => {
-  const data = readData();
-  if (markDone(data, String(id), !!done)) commit(data);
-  return true;
-});
-ipcMain.handle('widget:open', () => { showWindow(); return true; });
-ipcMain.handle('widget:new', () => {
-  const existed = !!mainWindow;
-  const win = showWindow();
-  const send = () => win.webContents.send('app:new');
-  if (!existed || win.webContents.isLoading()) win.webContents.once('did-finish-load', send); else send();
-  return true;
-});
-ipcMain.handle('widget:close', () => { if (widgetWin) widgetWin.close(); return true; });
-ipcMain.handle('widget:pin', () => {
-  if (!widgetWin) return true;
-  const pinned = !widgetWin.isAlwaysOnTop();
-  widgetWin.setAlwaysOnTop(pinned);
-  writeWidgetState({ pinned });
-  return pinned;
-});
-ipcMain.handle('widget:toggle', (_e, force) => toggleWidget(typeof force === 'boolean' ? force : undefined));
-ipcMain.handle('widget:state', () => !!widgetWin);
-
 const actionFromArgv = (argv) => (argv || []).map(parseActionUrl).find(Boolean) || null;
 
 function startScheduler() {
   setTimeout(tick, 4000);
   setInterval(tick, 30 * 1000);
-  setInterval(syncPoll, 30 * 1000);
 }
 
 // ---------- IPC ----------
-ipcMain.handle('data:load', () => {
-  let d = readData();
-  const r = runSync(d); // si la synchro est active, on repart de la version fusionnée
-  if (r.changedLocal) { d = r.data; writeData(d); }
-  return d;
-});
+ipcMain.handle('data:load', () => readData());
 ipcMain.handle('data:save', (_e, data) => {
-  const d = {
-    homework: Array.isArray(data && data.homework) ? data.homework : [],
-    trash: Array.isArray(data && data.trash) ? data.trash : [],
-    archive: Array.isArray(data && data.archive) ? data.archive : [],
-    settings: data && data.settings && typeof data.settings === 'object' ? data.settings : {},
-  };
-  writeData(d);
-  applySystemSettings(d.settings);
-  refreshTrayMenu();
-  const r = runSync(d);
-  if (r.changedLocal) { writeData(r.data); pushToMain(r.data); } // l'autre ordinateur avait du nouveau
-  refreshWidget();
+  writeData(data);
+  applySystemSettings(data && data.settings);
   return true;
-});
-
-// ----- Synchronisation : choix du dossier, état, synchroniser maintenant -----
-ipcMain.handle('sync:pick', async (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
-  const r = await dialog.showOpenDialog(win, { title: T('Choisir le dossier de synchronisation'), properties: ['openDirectory', 'createDirectory'] });
-  if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-  return { ok: true, folder: r.filePaths[0] };
-});
-ipcMain.handle('sync:now', () => {
-  const d = readData();
-  const r = runSync(d);
-  if (r.changedLocal) { writeData(r.data); refreshWidget(); }
-  return {
-    ok: !!r.ok, disabled: !!r.disabled, error: r.error || '', lastSync: syncState.lastSync,
-    data: r.changedLocal ? { homework: r.data.homework, trash: r.data.trash, archive: r.data.archive, subjects: r.data.settings.subjects || null, templates: r.data.settings.templates || null } : null,
-  };
-});
-ipcMain.handle('sync:status', () => ({ lastSync: syncState.lastSync, error: syncState.lastError }));
-
-// ----- Import d'un emploi du temps depuis un fichier -----
-ipcMain.handle('schedule:import', async (e) => {
-  try {
-    const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
-    const r = await dialog.showOpenDialog(win, {
-      title: T('Importer un emploi du temps'),
-      properties: ['openFile'],
-      filters: [
-        { name: T('Emploi du temps (.csv, .txt, .ics, .json)'), extensions: ['csv', 'txt', 'ics', 'json'] },
-        { name: T('Tous les fichiers'), extensions: ['*'] },
-      ],
-    });
-    if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-    const file = r.filePaths[0];
-    if (fs.statSync(file).size > 1024 * 1024) return { ok: false, reason: 'size' };
-    const rows = parseSchedule(fs.readFileSync(file, 'utf8'), path.extname(file).slice(1));
-    if (!rows.length) return { ok: false, reason: 'empty' };
-    return { ok: true, name: path.basename(file), rows };
-  } catch (err) {
-    return { ok: false, reason: 'read' };
-  }
 });
 
 ipcMain.handle('notif:test', () => {
@@ -589,7 +299,7 @@ ipcMain.handle('backup:export', async (e, data, parts) => {
   try {
     const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
     const r = await dialog.showSaveDialog(win, {
-      title: T('Exporter une sauvegarde'),
+      title: 'Exporter une sauvegarde',
       defaultPath: path.join(app.getPath('documents'), backup.defaultFileName()),
       filters: FILE_FILTERS,
     });
@@ -613,7 +323,7 @@ ipcMain.handle('backup:pick', async (e) => {
   try {
     const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
     const r = await dialog.showOpenDialog(win, {
-      title: T('Importer une sauvegarde'),
+      title: 'Importer une sauvegarde',
       properties: ['openFile'],
       filters: FILE_FILTERS,
     });
@@ -657,7 +367,7 @@ ipcMain.handle('print:pdf', async (e, name) => {
   let base = String(name || 'MesDevoirs.pdf').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80);
   if (!/\.pdf$/i.test(base)) base += '.pdf';
   const r = await dialog.showSaveDialog(win, {
-    title: T('Enregistrer en PDF'),
+    title: 'Enregistrer en PDF',
     defaultPath: path.join(app.getPath('documents'), base),
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
   });
@@ -678,7 +388,7 @@ const UNSAFE_EXT = new Set([
 
 ipcMain.handle('file:pick', async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender) || undefined;
-  const r = await dialog.showOpenDialog(win, { title: T('Joindre un fichier'), properties: ['openFile', 'multiSelections'] });
+  const r = await dialog.showOpenDialog(win, { title: 'Joindre un fichier', properties: ['openFile', 'multiSelections'] });
   if (r.canceled) return [];
   return r.filePaths.slice(0, 10).map((p) => ({ path: p, name: path.basename(p) }));
 });
@@ -735,7 +445,7 @@ ipcMain.handle('update:download', async (e) => {
     });
     if (!r.ok) return r;
 
-    const openError = await shell.openPath(dest); // ouvre l'installateur Windows (.msi)
+    const openError = await shell.openPath(dest); // ouvre l'installateur (.msi sous Windows ; .dmg monté dans le Finder sous macOS)
     if (openError) return { ok: false, reason: 'launch' };
 
     // On ferme l'appli pour que l'installateur puisse remplacer ses fichiers
@@ -755,6 +465,44 @@ ipcMain.handle('update:open', (_e, url) => {
   return false;
 });
 
+// ---------- Menu macOS ----------
+function buildMacMenu() {
+  return Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about', label: 'À propos de Mes Devoirs' },
+        { type: 'separator' },
+        { role: 'hide', label: 'Masquer Mes Devoirs' },
+        { role: 'hideOthers', label: 'Masquer les autres' },
+        { role: 'unhide', label: 'Tout afficher' },
+        { type: 'separator' },
+        { label: 'Quitter Mes Devoirs', accelerator: 'Command+Q', click: () => { isQuitting = true; app.quit(); } },
+      ],
+    },
+    {
+      label: 'Édition',
+      submenu: [
+        { role: 'undo', label: 'Annuler' },
+        { role: 'redo', label: 'Rétablir' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Couper' },
+        { role: 'copy', label: 'Copier' },
+        { role: 'paste', label: 'Coller' },
+        { role: 'selectAll', label: 'Tout sélectionner' },
+      ],
+    },
+    {
+      label: 'Fenêtre',
+      submenu: [
+        { role: 'minimize', label: 'Réduire' },
+        { role: 'zoom', label: 'Agrandir' },
+        { role: 'close', label: 'Fermer' },
+      ],
+    },
+  ]);
+}
+
 // ---------- Démarrage ----------
 // Une seule instance à la fois
 const gotLock = app.requestSingleInstanceLock();
@@ -768,7 +516,8 @@ if (!gotLock) {
   app.on('before-quit', () => { isQuitting = true; });
 
   app.whenReady().then(() => {
-    Menu.setApplicationMenu(null);
+    // Windows / Linux : pas de barre de menus. macOS : il faut un menu minimal, sinon ⌘Q, ⌘C, ⌘V, ⌘W… ne marchent pas
+    Menu.setApplicationMenu(process.platform === 'darwin' ? buildMacMenu() : null);
     const settings = readData().settings;
     // Lancé par Windows au démarrage : on reste discret dans la zone de notification
     const launchAction = actionFromArgv(process.argv);
@@ -782,7 +531,6 @@ if (!gotLock) {
     if (app.isPackaged) { try { app.setAsDefaultProtocolClient('mesdevoirs'); } catch (e) { /* ignoré */ } }
     createWindow(startHidden);
     applySystemSettings(settings);
-    if (settings.widgetAuto === true) createWidget();
     startScheduler();
     app.on('activate', () => showWindow());
   });
@@ -791,7 +539,6 @@ if (!gotLock) {
     if (process.platform === 'darwin') return;
     // En mode « arrière-plan », fermer la fenêtre ne quitte pas l'appli (elle reste dans la zone de notification)
     if (!isQuitting && notifSettings().background) return;
-    if (!isQuitting && widgetWin) return; // le mini-widget reste ouvert
     app.quit();
   });
 }

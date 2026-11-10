@@ -48,10 +48,14 @@ async function getJson(url, fetchFn) {
   try { return { json: await res.json() }; } catch (e) { return { err: { status: 'error' } }; }
 }
 
-// Choisit le .msi qui correspond à l'architecture (x64, ia32, arm64) parmi les fichiers d'une release
-function pickAsset(assets, arch) {
+// Choisit l'installeur qui correspond au système et à l'architecture parmi les fichiers d'une release :
+// Windows → MesDevoirs-<version>-<arch>.msi (x64, ia32, arm64) ; macOS → MesDevoirs-<version>-mac-<arch>.dmg (x64, arm64)
+function pickAsset(assets, arch, platform = process.platform) {
   if (!Array.isArray(assets)) return null;
-  const re = new RegExp(`-${String(arch).replace(/[^\w]/g, '')}\\.msi$`, 'i');
+  const a0 = String(arch).replace(/[^\w]/g, '');
+  const re = platform === 'darwin'
+    ? new RegExp(`-mac-${a0}\\.dmg$`, 'i')
+    : new RegExp(`-${a0}\\.msi$`, 'i');
   const a = assets.find((x) => x && typeof x.name === 'string' && re.test(x.name) && typeof x.browser_download_url === 'string');
   if (!a) return null;
   const m = /^sha256:([0-9a-f]{64})$/i.exec(String(a.digest || ''));

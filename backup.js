@@ -84,9 +84,6 @@ function sanitizeHomework(list) {
     };
     // Champs ajoutés plus tard : on ne les écrit que s'ils sont utilisés (fichiers plus légers, anciens fichiers inchangés)
     if (KINDS.includes(h.kind)) item.kind = h.kind;
-    // Suivi des modifications (synchronisation), corbeille et archive
-    ['updatedAt', 'deletedAt', 'archivedAt', 'restoredAt'].forEach((f) => { const t = num(h[f]); if (t !== null && t > 0) item[f] = t; });
-    if (h.purged === true) item.purged = true; // supprimé définitivement : trace gardée pour que la synchro le sache
     const minutes = Math.round(Number(h.minutes));
     if (minutes > 0) item.minutes = Math.min(minutes, 1440);
     if (date && REPEATS.includes(h.repeat)) item.repeat = h.repeat;
@@ -133,33 +130,6 @@ function sanitizeSubjects(list) {
   return out;
 }
 
-// Modèles de devoirs (sous-tâches toutes prêtes)
-function sanitizeTemplates(list) {
-  const out = [];
-  const ids = new Set();
-  (Array.isArray(list) ? list : []).slice(0, 50).forEach((t) => {
-    if (!t || typeof t !== 'object') return;
-    const name = str(t.name, 60);
-    if (!name) return;
-    let id = str(t.id, 64);
-    if (!id || ids.has(id)) id = uid();
-    ids.add(id);
-    const p = Number(t.priority);
-    const item = { id, name, title: str(t.title, 500), subject: str(t.subject, 60), priority: p === 2 || p === 3 ? p : 1 };
-    if (KINDS.includes(t.kind)) item.kind = t.kind;
-    const minutes = Math.round(Number(t.minutes));
-    if (minutes > 0) item.minutes = Math.min(minutes, 1440);
-    const notes = str(t.notes, 5000);
-    if (notes) item.notes = notes;
-    const tags = sanitizeTags(t.tags);
-    if (tags.length) item.tags = tags;
-    const subtasks = (Array.isArray(t.subtasks) ? t.subtasks : []).map((x) => str(typeof x === 'object' && x ? x.text : x, 200)).filter(Boolean).slice(0, 30);
-    if (subtasks.length) item.subtasks = subtasks;
-    out.push(item);
-  });
-  return out;
-}
-
 // Réglages qu'on accepte d'importer. Volontairement absents : le dépôt de mises à jour et le tag de version
 // (un fichier piégé pourrait sinon pointer vers un autre dépôt et faire installer un programme étranger).
 function sanitizeSettings(raw) {
@@ -175,9 +145,6 @@ function sanitizeSettings(raw) {
   if ([90, 100, 115, 130].includes(Number(s.fontScale))) out.fontScale = Number(s.fontScale);
   if (typeof s.compact === 'boolean') out.compact = s.compact;
   if (s.calMode === 'month' || s.calMode === 'week') out.calMode = s.calMode;
-  if (s.language === 'fr' || s.language === 'en') out.language = s.language;
-  if ([0, 3, 6, 12, 24].includes(Number(s.archiveMonths))) out.archiveMonths = Number(s.archiveMonths);
-  if (Array.isArray(s.templates)) out.templates = sanitizeTemplates(s.templates);
   if (s.notifications && typeof s.notifications === 'object') out.notifications = normalizeSettings(s.notifications);
   return out;
 }
@@ -188,11 +155,7 @@ function buildBackup(data, parts, appVersion, now = new Date()) {
   const p = Object.assign({ homework: true, subjects: true, settings: true }, parts);
   const settings = (data && data.settings) || {};
   const file = { app: APP_ID, format: FORMAT, exportedAt: now.toISOString(), appVersion: String(appVersion || '') };
-  if (p.homework) {
-    file.homework = sanitizeHomework(data && data.homework);
-    const archive = sanitizeHomework(data && data.archive);
-    if (archive.length) file.archive = archive;
-  }
+  if (p.homework) file.homework = sanitizeHomework(data && data.homework);
   if (p.subjects) file.subjects = sanitizeSubjects(settings.subjects);
   if (p.settings) file.settings = sanitizeSettings(settings);
   return file;
@@ -223,7 +186,6 @@ function parseBackup(text) {
     homework: hasHomework ? sanitizeHomework(raw.homework) : null,
     subjects: hasSubjects ? sanitizeSubjects(rawSubjects) : null,
     settings: hasSettings ? sanitizeSettings(raw.settings) : null,
-    archive: hasHomework && Array.isArray(raw.archive) ? sanitizeHomework(raw.archive) : [],
   };
   const exportedAt = typeof raw.exportedAt === 'string' && !Number.isNaN(Date.parse(raw.exportedAt)) ? raw.exportedAt : null;
   return {
@@ -251,7 +213,6 @@ function applyImport(current, data, options) {
   const replace = o.mode === 'replace';
   const cur = {
     homework: Array.isArray(current && current.homework) ? current.homework.slice() : [],
-    archive: Array.isArray(current && current.archive) ? current.archive.slice() : [],
     settings: Object.assign({}, current && current.settings),
   };
   cur.settings.subjects = Array.isArray(cur.settings.subjects) ? cur.settings.subjects.slice() : [];
@@ -260,7 +221,6 @@ function applyImport(current, data, options) {
   if (o.homework && data.homework) {
     if (replace) {
       cur.homework = data.homework.slice();
-      cur.archive = (data.archive || []).slice();
       report.homeworkAdded = data.homework.length;
     } else {
       const ids = new Set(cur.homework.map((h) => h.id));
@@ -276,15 +236,6 @@ function applyImport(current, data, options) {
         sigs.add(sig);
         cur.homework.push(id === h.id ? h : Object.assign({}, h, { id }));
         report.homeworkAdded++;
-      });
-      (data.archive || []).forEach((h) => {
-        const sig = homeworkSignature(h);
-        if (sigs.has(sig)) return;
-        sigs.add(sig);
-        let id = h.id;
-        while (ids.has(id)) id = uid();
-        ids.add(id);
-        cur.archive.push(id === h.id ? h : Object.assign({}, h, { id }));
       });
     }
   }
@@ -316,6 +267,6 @@ function applyImport(current, data, options) {
 
 module.exports = {
   APP_ID, FORMAT, MAX_FILE_BYTES,
-  sanitizeHomework, sanitizeSubjects, sanitizeSettings, sanitizeTemplates,
+  sanitizeHomework, sanitizeSubjects, sanitizeSettings,
   buildBackup, defaultFileName, parseBackup, applyImport,
 };
