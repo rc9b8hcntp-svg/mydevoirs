@@ -834,3 +834,55 @@ dialog.cmdk input { width: 100%; border: 0; border-bottom: 1px solid var(--borde
 dialog.cmdk ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
 dialog.cmdk li { padding: 9px 12px; border-radius: 8px; cursor: pointer; }
 dialog.cmdk li.on { background: var(--accent); color: var(--accent-text); }
+
+/* ---------- Organisation et confort ---------- */
+input[type="password"] {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); font-size: 15px; font-family: inherit;
+}
+input[type="password"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+button.small { padding: 6px 12px; font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
+.nav-btn .count { margin-left: auto; }
+.nav-btn .count[hidden] { display: none; }
+
+/* Ajout rapide */
+.quick-bar {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; row-gap: 6px;
+  padding: 8px 14px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+}
+.quick-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.quick-bar > .ico { width: 18px; height: 18px; color: var(--accent); }
+.quick-bar input { border: 0; background: transparent; padding: 6px 0; font-size: 15px; width: 100%; color: var(--text); }
+.quick-bar input:focus { outline: none; }
+.quick-preview { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; padding-bottom: 4px; }
+.quick-preview[hidden] { display: none; }
+.qp-title { font-weight: 600; margin-right: 4px; }
+.qp-chip { padding: 2px 9px; border-radius: 20px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+.qp-chip.colored { color: var(--text); border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--panel)); }
+.qp-hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+/* Corbeille et archive */
+dialog.boxdlg { width: min(560px, 94vw); max-height: 88vh; }
+dialog.boxdlg[open] { display: flex; }
+.boxdlg .hint { margin: -6px 0 0; }
+.box-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 120px; max-height: 50vh; display: flex; flex-direction: column; gap: 6px; }
+.box-empty { padding: 28px 10px; text-align: center; color: var(--muted); }
+.box-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-left: 4px solid var(--c, var(--muted)); border-radius: 10px; background: var(--panel); }
+.box-body { flex: 1; min-width: 0; }
+.box-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.box-meta { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.box-item .btns { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.box-item .del { padding: 7px; color: var(--muted); }
+.box-item .del:hover { color: var(--danger); background: var(--bg); }
+
+/* Verrouillage */
+dialog.lockdlg { width: min(360px, 92vw); text-align: center; align-items: stretch; }
+dialog.lockdlg::backdrop { background: var(--bg); }
+.lockdlg h2 { margin: 0; font-size: 19px; }
+.lock-ico { font-size: 40px; line-height: 1; }
+.lockdlg form { display: flex; flex-direction: column; gap: 10px; }
+.lockdlg input { text-align: center; letter-spacing: .15em; }
+.lockdlg .link { align-self: center; }
+.lock-form { display: flex; flex-direction: column; gap: 8px; max-width: 360px; padding: 12px 0; }
+.lock-form[hidden], .lock-form input[hidden] { display: none; }

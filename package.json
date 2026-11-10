@@ -24,6 +24,9 @@
       "notifier.js",
       "backup.js",
       "downloader.js",
+      "sync.js",
+      "schedule-import.js",
+      "widget-preload.js",
       "src/**/*",
       "build/icon.png"
     ],

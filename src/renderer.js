@@ -1,6 +1,8 @@
 'use strict';
 
 // ---------- Constantes ----------
+// Langue d'affichage des dates (changée au démarrage si l'interface est en anglais)
+let LOCALE = 'fr-FR';
 const PRIORITY_LABELS = { 1: 'Normale', 2: 'Importante', 3: 'Urgente' };
 const KINDS = { controle: { label: 'Contrôle', emoji: '📝' }, expose: { label: 'Exposé', emoji: '🎤' } }; // vide = simple devoir
 const REPEATS = { daily: 'Chaque jour', weekly: 'Chaque semaine', monthly: 'Chaque mois' };
@@ -92,10 +94,14 @@ const ICONS = {
   keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
 };
 
 const state = {
   homework: [],
+  trash: [],    // devoirs supprimés (récupérables 30 jours)
+  archive: [],  // devoirs terminés depuis longtemps
   settings: {},
   filter: 'todo',
   subject: null, // null = toutes les matières
@@ -135,7 +141,7 @@ function daysUntil(str) {
 function formatDate(str) {
   const d = parseDate(str);
   if (!d) return '';
-  return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  return d.toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function dueLabel(str) {
@@ -236,9 +242,27 @@ function hydrateIcons() {
 
 // ---------- Sauvegarde ----------
 let saveTimer = null;
+
+// Chaque devoir porte la date de sa dernière modification (« updatedAt »), pour que la synchronisation
+// entre ordinateurs sache quelle version est la plus récente. On la met à jour en comparant avec la version précédente.
+const savedSigs = new Map();
+const itemSig = (h) => JSON.stringify(h, (k, v) => (k === 'updatedAt' ? undefined : v));
+function resetSignatures() {
+  savedSigs.clear();
+  [state.homework, state.trash, state.archive].forEach((list) => list.forEach((h) => savedSigs.set(h.id, itemSig(h))));
+}
+function stampChanges() {
+  const now = Date.now();
+  [state.homework, state.trash, state.archive].forEach((list) => list.forEach((h) => {
+    const sig = itemSig(h);
+    if (savedSigs.get(h.id) !== sig) { h.updatedAt = now; savedSigs.set(h.id, sig); }
+  }));
+}
+
 function saveNow() {
   saveTimer = null;
-  window.devoirsAPI.save({ homework: state.homework, settings: state.settings });
+  stampChanges();
+  window.devoirsAPI.save({ homework: state.homework, trash: state.trash, archive: state.archive, settings: state.settings });
 }
 function persist() {
   clearTimeout(saveTimer);
@@ -290,12 +314,18 @@ function undoLast() {
   return runUndo(entry);
 }
 
+// Les devoirs supprimés vont dans la corbeille (30 jours) ; « Annuler » les remet tout de suite
 function deleteItems(items, text) {
   const ids = new Set(items.map((h) => h.id));
+  const now = Date.now();
   state.homework = state.homework.filter((h) => !ids.has(h.id));
+  items.forEach((h) => { h.deletedAt = now; state.trash.push(h); });
   persist();
   render();
-  pushUndo(text, () => { state.homework.push(...items); });
+  pushUndo(text, () => {
+    state.trash = state.trash.filter((h) => !ids.has(h.id));
+    items.forEach((h) => { delete h.deletedAt; state.homework.push(h); });
+  });
 }
 
 // ---------- Terminé / pas terminé (avec les devoirs qui se répètent) ----------
@@ -854,12 +884,12 @@ function mondayOf(d) {
 function calTitleText() {
   const a = state.calAnchor;
   if (state.calMode === 'month') {
-    const t = new Date(a.getFullYear(), a.getMonth(), 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    const t = new Date(a.getFullYear(), a.getMonth(), 1).toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' });
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
   const s = mondayOf(a);
   const e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 4); // vendredi
-  const mon = (d, style) => d.toLocaleDateString('fr-FR', { month: style });
+  const mon = (d, style) => d.toLocaleDateString(LOCALE, { month: style });
   if (s.getFullYear() !== e.getFullYear()) return `${s.getDate()} ${mon(s, 'short')} ${s.getFullYear()} – ${e.getDate()} ${mon(e, 'short')} ${e.getFullYear()}`;
   if (s.getMonth() !== e.getMonth()) return `${s.getDate()} ${mon(s, 'short')} – ${e.getDate()} ${mon(e, 'short')} ${e.getFullYear()}`;
   return `${s.getDate()} – ${e.getDate()} ${mon(e, 'long')} ${e.getFullYear()}`;
@@ -1023,6 +1053,7 @@ function render() {
     b.classList.toggle('active', b.dataset.filter === state.filter);
   });
   renderCounts();
+  if (window.extras) window.extras.counts();
   renderSubjects();
   renderView();
 }
@@ -1292,6 +1323,7 @@ function openDialog(id, presetDate, template) {
   renderFormFiles();
   closeQuickAdd();
   renderPicker();
+  if (window.extras) window.extras.dialogOpened(!!h);
   $('dialog').showModal();
   $('f-title').focus();
 }
@@ -1376,6 +1408,7 @@ let newSubjectColor = SUBJECT_COLORS[0].value;
 function showTab(tab) {
   if (tab === 'schedule') renderSchedule();
   if (tab === 'update') loadTags();
+  if (window.extras) window.extras.tabShown(tab);
   if (tab !== 'backup' && typeof resetImportBox === 'function' && !$('bi-box').hidden) { window.devoirsAPI.cancelBackup(); resetImportBox(); }
   document.querySelectorAll('#setNav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.set-body section').forEach((s) => { s.hidden = s.dataset.panel !== tab; });
@@ -1614,12 +1647,25 @@ function applyPendingSpawns() {
   });
   return spawned;
 }
-window.devoirsAPI.onDataChanged((homework) => {
-  if (!Array.isArray(homework)) return;
-  state.homework = homework;
+// Reçoit les nouvelles données (bouton de notification, widget, synchronisation avec un autre ordinateur)
+function applyExternalData(data) {
+  if (!data) return;
+  if (Array.isArray(data)) data = { homework: data };
+  if (!Array.isArray(data.homework)) return;
+  state.homework = data.homework;
+  if (Array.isArray(data.trash)) state.trash = data.trash;
+  if (Array.isArray(data.archive)) state.archive = data.archive;
+  if (Array.isArray(data.subjects)) {
+    state.settings.subjects = data.subjects.map((x) => ({ id: x.id || uid(), name: x.name, color: x.color, days: Array.isArray(x.days) ? x.days : [] }));
+    if (state.subject !== null && !findSubject(state.subject)) state.subject = null;
+  }
+  if (Array.isArray(data.templates)) state.settings.templates = data.templates;
+  resetSignatures();
   if (applyPendingSpawns()) persist();
   render();
-});
+  if (window.extras) window.extras.dataReplaced();
+}
+window.devoirsAPI.onDataChanged(applyExternalData);
 
 // Clic sur une notification : on ouvre la bonne liste
 // (si la fenêtre vient d'être recréée, on attend la fin du chargement des données)
@@ -1699,7 +1745,7 @@ $('bx-go').addEventListener('click', async () => {
   if (!parts.homework && !parts.subjects && !parts.settings) { msg.textContent = 'Choisis au moins une partie à exporter.'; return; }
   $('bx-go').disabled = true;
   let r;
-  try { r = await window.devoirsAPI.exportBackup({ homework: state.homework, settings: state.settings }, parts); } catch (e) { r = { ok: false, reason: 'write' }; }
+  try { r = await window.devoirsAPI.exportBackup({ homework: state.homework, archive: state.archive, settings: state.settings }, parts); } catch (e) { r = { ok: false, reason: 'write' }; }
   $('bx-go').disabled = false;
   if (r && r.ok) {
     const bits = [];
@@ -1726,7 +1772,7 @@ $('bi-pick').addEventListener('click', async () => {
   importMode = 'merge';
   $('bi-title').textContent = r.name;
   $('bi-sub').textContent = r.exportedAt
-    ? `Sauvegarde du ${new Date(r.exportedAt).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}`
+    ? `Sauvegarde du ${new Date(r.exportedAt).toLocaleString(LOCALE, { dateStyle: 'long', timeStyle: 'short' })}`
     : 'Sauvegarde sans date';
   const c = r.counts;
   [['homework', c.homework, 'devoir', 'devoirs'], ['subjects', c.subjects, 'matière', 'matières']].forEach(([k, n, one, many]) => {
@@ -1768,7 +1814,7 @@ $('bi-apply').addEventListener('click', async () => {
   }
   $('bi-apply').disabled = true;
   let r;
-  try { r = await window.devoirsAPI.applyBackup({ homework: state.homework, settings: state.settings }, options); } catch (e) { r = { ok: false, reason: 'apply' }; }
+  try { r = await window.devoirsAPI.applyBackup({ homework: state.homework, archive: state.archive, settings: state.settings }, options); } catch (e) { r = { ok: false, reason: 'apply' }; }
   if (!r || !r.ok) {
     $('bi-err').textContent = BACKUP_ERRORS[(r && r.reason) || 'apply'];
     $('bi-apply').disabled = false;
@@ -1776,11 +1822,13 @@ $('bi-apply').addEventListener('click', async () => {
   }
 
   state.homework = r.state.homework;
+  state.archive = r.state.archive || [];
   state.settings = Object.assign(state.settings, r.state.settings);
   state.settings.defaultPriority = String(state.settings.defaultPriority);
   clearTimeout(saveTimer);
   saveNow();
   refreshAfterImport();
+  if (window.extras) window.extras.dataReplaced();
 
   const rep = r.report;
   const bits = [];
@@ -2072,18 +2120,21 @@ $('clearDone').addEventListener('click', () => {
 });
 
 // ---------- Statistiques ----------
+// Les statistiques comptent aussi les devoirs archivés
+function statsPool() { return state.homework.concat(state.archive); }
+
 // Série : jours de suite (jusqu'à aujourd'hui) où aucun devoir n'était en retard
 function lateStreak() {
-  if (!state.homework.length) return null;
+  if (!statsPool().length) return null;
   const today = todayStr();
   let start = today;
-  state.homework.forEach((h) => {
+  statsPool().forEach((h) => {
     if (h.created) { const c = ymd(new Date(h.created)); if (c < start) start = c; }
   });
   const floor = shiftDate(today, -400);
   if (start < floor) start = floor;
   const bad = new Set();
-  state.homework.forEach((h) => {
+  statsPool().forEach((h) => {
     if (!h.date) return;
     let to = null;
     if (h.done) {
@@ -2107,7 +2158,7 @@ function lateStreak() {
 }
 
 function onTimeStats() {
-  const done = state.homework.filter((h) => h.done && h.date && h.doneAt);
+  const done = statsPool().filter((h) => h.done && h.date && h.doneAt);
   const by = new Map();
   let ok = 0;
   done.forEach((h) => {
@@ -2131,7 +2182,7 @@ function weekStats(n) {
     const start = ymd(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() - 7 * i));
     const end = shiftDate(start, 6);
     const w = { start, ok: 0, late: 0, missed: 0, todo: 0 };
-    state.homework.forEach((h) => {
+    statsPool().forEach((h) => {
       if (!h.date || h.date < start || h.date > end) return;
       if (h.done) { if (h.doneAt && ymd(new Date(h.doneAt)) > h.date) w.late++; else w.ok++; }
       else if (h.date < today) w.missed++;
@@ -2146,7 +2197,7 @@ function weekStats(n) {
 // Moyennes sur 20, pondérées par les coefficients, par matière
 function gradeStats() {
   const by = new Map();
-  state.homework.forEach((h) => {
+  statsPool().forEach((h) => {
     if (typeof h.grade !== 'number') return;
     const max = h.gradeMax > 0 ? h.gradeMax : 20;
     const coef = h.coef > 0 ? h.coef : 1;
@@ -2250,7 +2301,7 @@ function renderStats() {
   const rows = el('div', 'st-rows');
   weeks.forEach((w) => {
     const row = el('div', 'st-row');
-    const label = parseDate(w.start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    const label = parseDate(w.start).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
     row.append(el('span', 'st-name plain', `Sem. du ${label}`));
     const track = el('div', 'pbar wk');
     const stack = el('div', 'wstack');
@@ -2308,7 +2359,7 @@ function printData() {
 }
 
 function longDate(str, withYear) {
-  return parseDate(str).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' } : {}) });
+  return parseDate(str).toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' } : {}) });
 }
 
 function buildPrintSheet() {
@@ -2430,6 +2481,8 @@ const SHORTCUTS = [
     ['Ctrl+I', 'Statistiques'],
     ['Ctrl+Maj+D', 'Changer de thème'],
     ['Ctrl+Z', 'Annuler la dernière suppression ou le dernier déplacement'],
+    ['Q', 'Ajout rapide (une phrase suffit)'],
+    ['Ctrl+L', "Verrouiller l'application (si un code est défini)"],
     ['F1|?', 'Afficher cette aide'],
   ]],
   ['Navigation', [
@@ -2507,6 +2560,7 @@ document.addEventListener('keydown', (e) => {
     else if (key === 'p' && !e.shiftKey) { e.preventDefault(); openPrint(); }
     else if (key === 'i' && !e.shiftKey) { e.preventDefault(); openStats(); }
     else if (key === 'z' && !e.shiftKey && !isTyping(e.target)) { if (undoLast()) e.preventDefault(); }
+    else if (key === 'l' && !e.shiftKey) { e.preventDefault(); if (window.extras) window.extras.lockNow(); }
     return;
   }
 
@@ -2521,6 +2575,7 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (e.key === '?') { e.preventDefault(); openHelp(); return; }
+  if (key === 'q' && !e.shiftKey && !e.ctrlKey) { e.preventDefault(); $('quickInput').focus(); return; }
   if (e.key === '/') { e.preventDefault(); $('search').focus(); return; }
 
   // Chiffres : on lit la touche physique (sur un clavier AZERTY, « 1 » sans Maj donne « & »)
@@ -2732,6 +2787,7 @@ function cmdActions() {
   [['today', "Aujourd'hui"], ['todo', 'À faire'], ['late', 'En retard'], ['week', 'Cette semaine'], ['done', 'Terminés'], ['all', 'Tous les devoirs']]
     .forEach(([f, l]) => a.push([`Afficher : ${l}`, () => clickIf(`#filters button[data-filter="${f}"]`), 'filtre']));
   if (pomo) a.push(['Arrêter le minuteur', stopTimer, 'pomodoro chrono']);
+  if (window.extras) a.push(...window.extras.commands());
   return a;
 }
 
@@ -2781,13 +2837,16 @@ setInterval(checkDayChange, 60 * 1000);
 window.addEventListener('focus', checkDayChange);
 
 // ---------- Démarrage ----------
-(async function init() {
+async function init() {
   hydrateIcons();
   const data = await window.devoirsAPI.load();
   state.homework = data.homework;
+  state.trash = Array.isArray(data.trash) ? data.trash : [];
+  state.archive = Array.isArray(data.archive) ? data.archive : [];
+  resetSignatures(); // point de départ pour savoir quels devoirs seront modifiés
   const pendingSpawned = applyPendingSpawns();
 
-  const defaults = { theme: 'light', accent: 'indigo', sort: 'date', startFilter: 'todo', defaultPriority: '1', confirmDelete: true, updateRepo: DEFAULT_UPDATE_REPO, view: 'list', calMode: 'month', updateTag: '' };
+  const defaults = { theme: 'light', accent: 'indigo', sort: 'date', startFilter: 'todo', defaultPriority: '1', confirmDelete: true, updateRepo: DEFAULT_UPDATE_REPO, view: 'list', calMode: 'month', updateTag: '', language: 'fr', archiveMonths: 6, lockAfter: 0, widgetAuto: false };
   state.settings = Object.assign(defaults, data.settings);
   state.settings.defaultPriority = String(state.settings.defaultPriority);
   state.settings.notifications = Object.assign({}, NOTIF_DEFAULTS, data.settings && data.settings.notifications);
@@ -2807,9 +2866,15 @@ window.addEventListener('focus', checkDayChange);
   state.view = state.settings.view === 'calendar' ? 'calendar' : 'list';
   state.calMode = state.settings.calMode === 'week' ? 'week' : 'month';
   $('sort').value = state.sort;
+  // Langue, modèles, corbeille, archive, verrouillage, widget… (voir extras.js)
+  if (window.extras) window.extras.init();
   applyTheme();
   render();
   appReady = true;
   if (pendingSpawned) persist();
   if (pendingOpenFilter !== null) { openFromNotification(pendingOpenFilter); pendingOpenFilter = null; }
-})();
+}
+
+// On attend que tous les scripts (dont extras.js) soient chargés avant de démarrer
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();

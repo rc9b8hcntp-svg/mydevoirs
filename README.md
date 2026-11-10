@@ -19,6 +19,15 @@ Un petit logiciel Windows pour noter ses devoirs.
 - **Notifications** : un rappel quotidien Windows (heure au choix, 18:00 par défaut) listant les devoirs à rendre aujourd'hui / demain / dans la semaine, et ceux en retard. Un clic sur la notification ouvre la bonne liste. Paramètres → Notifications
 - **Notifications avancées** (Paramètres → Notifications) : un rappel par devoir la veille de l'échéance, des boutons « Marquer fait » / « Rappeler demain » dans la notification (sans ouvrir l'appli), un rappel du matin (« tes devoirs du jour »), un mode vacances (coupe les rappels entre deux dates) et le choix du son (ou silencieux)
 - L'appli peut rester dans la zone de notification quand on ferme la fenêtre (pour que les rappels arrivent) et se lancer au démarrage de Windows
+- **Ajout rapide** (touche `Q`) : une phrase suffit, par ex. « maths ex 5 p 42 demain urgent 1h #groupe » (matière, date, priorité, durée et étiquettes sont reconnues ; aperçu en direct)
+- **Modèles de devoirs** avec étapes prêtes (exposé, contrôle, lecture…), modifiables et à créer soi-même
+- **Corbeille** (30 jours, avec restauration) : supprimer un devoir ne le perd plus ; Ctrl+Z reste disponible
+- **Archive automatique** des devoirs terminés depuis plus de N mois (Paramètres → Organisation), consultable et restaurable ; les statistiques les comptent toujours
+- **Import d'emploi du temps** depuis un fichier CSV, TXT, ICS ou JSON (Paramètres → Matières / Emploi du temps)
+- **Mini-widget** toujours visible (en retard / aujourd'hui / demain, cases à cocher), épinglable au-dessus des autres fenêtres, ouvrable depuis la zone de notification
+- **Synchronisation entre ordinateurs** via un dossier partagé (OneDrive, Dropbox, clé USB…) : le fichier `MesDevoirs-synchro.json` est fusionné, la modification la plus récente gagne
+- **Code de verrouillage** (verrouillage automatique après inactivité, `Ctrl+L`). Attention : il masque l'appli mais ne chiffre pas `devoirs.json`
+- **Français / English** (Paramètres → Confort)
 - Raccourcis : `Ctrl+N` nouveau devoir, `Ctrl+F` recherche
 
 ## Versions Windows

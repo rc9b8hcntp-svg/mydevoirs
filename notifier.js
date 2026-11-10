@@ -225,5 +225,5 @@ function buildToastXml({ title, body, sound, actions }) {
 
 module.exports = {
   DEFAULTS, SOUNDS, normalizeSettings, buildDigest, isDue, ymd,
-  isPaused, isDueAt, buildMorning, buildReminder, dueTomorrow, actionUrl, parseActionUrl, buildToastXml,
+  isPaused, isDueAt, buildMorning, buildReminder, dueTomorrow, actionUrl, parseActionUrl, buildToastXml, daysUntil,
 };

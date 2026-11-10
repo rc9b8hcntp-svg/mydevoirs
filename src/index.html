@@ -36,6 +36,9 @@
 
       <div class="side-foot">
         <button class="nav-btn" id="clearDone"><span class="ico" data-icon="trash"></span>Supprimer les terminés</button>
+        <button class="nav-btn" id="trashBtn"><span class="ico" data-icon="trash"></span><span class="lbl">Corbeille</span><span class="count" id="c-trash">0</span></button>
+        <button class="nav-btn" id="archiveBtn"><span class="ico" data-icon="archive"></span><span class="lbl">Archive</span><span class="count" id="c-archive">0</span></button>
+        <button class="nav-btn" id="widgetBtn"><span class="ico" data-icon="monitor"></span>Mini-widget</button>
         <button class="nav-btn" id="helpBtn"><span class="ico" data-icon="keyboard"></span>Raccourcis clavier</button>
         <button class="nav-btn" id="settingsBtn"><span class="ico" data-icon="settings"></span>Paramètres</button>
       </div>
@@ -57,6 +60,12 @@
           <button class="icon-btn" id="themeBtn" title="Changer de thème (Ctrl+Maj+D)" aria-label="Changer de thème"><span class="ico" data-icon="moon"></span></button>
         </div>
       </header>
+
+      <div class="quick-bar" id="quickBar">
+        <span class="ico" data-icon="plus"></span>
+        <input type="text" id="quickInput" maxlength="300" autocomplete="off" spellcheck="false" placeholder="Ajout rapide : Maths ex 5 p.12 pour vendredi" title="Tape une phrase : matière, jour, durée… (touche Q)" aria-label="Ajout rapide">
+        <div id="quickPreview" class="quick-preview" hidden></div>
+      </div>
 
       <div class="toolbar">
         <div class="search-box">
@@ -111,6 +120,11 @@
       <div class="dlg-head">
         <h2 id="dialogTitle">Nouveau devoir</h2>
         <button type="button" class="icon-btn tiny" id="dlgClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+      </div>
+
+      <div class="field" id="f-tpl-box">
+        <span class="flabel">Modèle</span>
+        <div id="f-templates" class="chips"></div>
       </div>
 
       <label class="field">
@@ -215,6 +229,8 @@
         <button type="button" class="ghost small attach" id="f-file-add"><span class="ico" data-icon="paperclip"></span>Joindre un fichier</button>
       </div>
 
+      <button type="button" class="link" id="f-tpl-save">Enregistrer comme modèle</button>
+
       <div class="actions">
         <button type="button" class="ghost" id="cancelBtn">Annuler</button>
         <button type="submit" class="primary" id="saveBtn">Enregistrer</button>
@@ -244,6 +260,34 @@
     </div>
     <div id="statsBody" class="stats-body"></div>
     <div class="actions"><button type="button" class="primary" id="stOk">OK</button></div>
+  </dialog>
+
+  <!-- Corbeille et archive -->
+  <dialog id="boxDialog" class="view boxdlg">
+    <div class="dlg-head">
+      <h2 id="boxTitle">Corbeille</h2>
+      <button type="button" class="icon-btn tiny" id="boxClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <p class="hint" id="boxHint"></p>
+    <input type="search" id="boxSearch" placeholder="Rechercher…" autocomplete="off" aria-label="Rechercher">
+    <ul id="boxList" class="box-list"></ul>
+    <div class="actions">
+      <button type="button" class="ghost" id="boxEmpty"><span class="ico" data-icon="trash"></span>Vider la corbeille</button>
+      <button type="button" class="primary" id="boxOk">Fermer</button>
+    </div>
+  </dialog>
+
+  <!-- Verrouillage par code -->
+  <dialog id="lockDialog" class="view lockdlg">
+    <div class="lock-ico">🔒</div>
+    <h2>Mes Devoirs est verrouillé</h2>
+    <form id="lockForm" autocomplete="off">
+      <input type="password" id="lockInput" placeholder="Code" maxlength="32" autocomplete="off" aria-label="Code">
+      <button type="submit" class="primary" id="lockOk">Déverrouiller</button>
+    </form>
+    <p class="err" id="lockErr"></p>
+    <button type="button" class="link" id="lockForgot">Code oublié ?</button>
+    <p class="hint" id="lockForgotText" hidden>Pour retrouver l'accès : ferme l'application, ouvre le fichier « devoirs.json » (dossier %APPDATA%\Mes Devoirs) avec le Bloc-notes et supprime le bloc « lock ». Tes devoirs sont conservés.</p>
   </dialog>
 
   <!-- Imprimer / PDF -->
@@ -291,6 +335,8 @@
         <button data-tab="schedule"><span class="ico" data-icon="clock"></span>Emploi du temps</button>
         <button data-tab="homework"><span class="ico" data-icon="sliders"></span>Devoirs</button>
         <button data-tab="notifications"><span class="ico" data-icon="bell"></span>Notifications</button>
+        <button data-tab="organize"><span class="ico" data-icon="layers"></span>Organisation</button>
+        <button data-tab="comfort"><span class="ico" data-icon="monitor"></span>Confort</button>
         <button data-tab="backup"><span class="ico" data-icon="save"></span>Sauvegarde</button>
         <button data-tab="update"><span class="ico" data-icon="download"></span>Mise à jour</button>
       </nav>
@@ -362,6 +408,10 @@
           <h3 class="set-title">Emploi du temps</h3>
           <p class="hint top">Coche les jours où tu as cours dans chaque matière. En créant un devoir pour un jour donné, l'application te propose les matières de ce jour-là, et la page « Aujourd'hui » affiche tes cours.</p>
           <div id="s-schedule" class="sched"></div>
+          <div class="setting">
+            <div class="desc">Importer un emploi du temps<small id="sched-msg">Depuis un fichier .csv, .txt, .ics (agenda) ou .json. Exemple : « Maths;lundi, mercredi » sur chaque ligne, ou un tableau avec une croix par jour.</small></div>
+            <button class="primary" id="sched-import"><span class="ico" data-icon="upload"></span>Importer…</button>
+          </div>
         </section>
 
         <!-- Devoirs -->
@@ -493,6 +543,113 @@
           </div>
         </section>
 
+        <!-- Organisation -->
+        <section data-panel="organize" hidden>
+          <h3 class="set-title">Organisation</h3>
+
+          <div class="group">
+            <div class="group-label">Modèles de devoirs</div>
+            <p class="hint top">Un modèle remplit le formulaire en un clic (titre, durée, étapes…). Pour en créer un : « Enregistrer comme modèle » dans « Nouveau devoir ».</p>
+            <div id="o-templates" class="srows"></div>
+            <button class="ghost small" id="o-tpl-restore"><span class="ico" data-icon="rotate"></span>Remettre les modèles par défaut</button>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Archiver automatiquement<small>Les devoirs terminés depuis longtemps quittent la liste (ils restent dans les statistiques et dans « Archive »).</small></div>
+            <select id="o-archive" aria-label="Archiver automatiquement">
+              <option value="0">Jamais</option>
+              <option value="3">Après 3 mois</option>
+              <option value="6">Après 6 mois</option>
+              <option value="12">Après 1 an</option>
+              <option value="24">Après 2 ans</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Archive<small id="o-archive-msg">Les devoirs archivés.</small></div>
+            <div class="btn-row">
+              <button class="ghost" id="o-archive-now">Archiver maintenant</button>
+              <button class="primary" id="o-archive-open">Ouvrir</button>
+            </div>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Corbeille<small>Un devoir supprimé reste récupérable pendant 30 jours.</small></div>
+            <button class="primary" id="o-trash-open">Ouvrir</button>
+          </div>
+        </section>
+
+        <!-- Confort -->
+        <section data-panel="comfort" hidden>
+          <h3 class="set-title">Confort</h3>
+
+          <div class="group">
+            <div class="group-label">Langue</div>
+            <div class="seg wide" id="langSeg" role="radiogroup" aria-label="Langue">
+              <button data-lang="fr">Français</button>
+              <button data-lang="en">English</button>
+            </div>
+            <p class="hint">L'application se recharge pour changer de langue.</p>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Mini-widget</div>
+            <div class="setting">
+              <div class="desc">Afficher le mini-widget<small>Une petite fenêtre toujours visible avec les devoirs en retard, d'aujourd'hui et de demain.</small></div>
+              <input type="checkbox" class="switch" id="w-open" aria-label="Afficher le mini-widget">
+            </div>
+            <div class="setting">
+              <div class="desc">L'ouvrir au démarrage<small>Le widget s'affiche dès que l'application se lance.</small></div>
+              <input type="checkbox" class="switch" id="w-auto" aria-label="Ouvrir le mini-widget au démarrage">
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Code de verrouillage</div>
+            <div class="setting">
+              <div class="desc">Code d'accès<small id="lock-state">Aucun code. Demande un code pour ouvrir l'application.</small></div>
+              <div class="btn-row">
+                <button class="primary" id="lock-set">Définir un code</button>
+                <button class="ghost" id="lock-remove" hidden>Retirer</button>
+              </div>
+            </div>
+            <div id="lock-form" class="lock-form" hidden>
+              <input type="password" id="lk-current" placeholder="Code actuel" maxlength="32" autocomplete="off" aria-label="Code actuel">
+              <input type="password" id="lk-new" placeholder="Nouveau code (4 caractères ou plus)" maxlength="32" autocomplete="off" aria-label="Nouveau code">
+              <input type="password" id="lk-confirm" placeholder="Répète le nouveau code" maxlength="32" autocomplete="off" aria-label="Répéter le nouveau code">
+              <div class="add-line">
+                <button class="primary" id="lk-save">Enregistrer</button>
+                <button class="ghost" id="lk-cancel">Annuler</button>
+              </div>
+            </div>
+            <p class="err" id="lk-err"></p>
+            <div class="setting">
+              <div class="desc">Verrouiller après inactivité<small>Redemande le code quand tu n'utilises plus l'application.</small></div>
+              <select id="lk-after" aria-label="Verrouiller après inactivité">
+                <option value="0">Jamais</option>
+                <option value="1">1 minute</option>
+                <option value="5">5 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+              </select>
+            </div>
+            <p class="hint">Le code empêche d'ouvrir l'application (Ctrl+L pour la verrouiller tout de suite) et cache les devoirs dans le widget. Il ne chiffre pas le fichier de données, et les notifications peuvent montrer le titre des devoirs.</p>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Synchronisation entre ordinateurs</div>
+            <p class="hint top">Choisis un dossier partagé (OneDrive, Google Drive, clé USB…) sur chaque ordinateur : les devoirs, la corbeille, l'archive, les matières et les modèles sont fusionnés automatiquement. Retirer une matière n'est pas synchronisé.</p>
+            <div class="setting">
+              <div class="desc">Dossier de synchronisation<small id="sync-status">Désactivée.</small></div>
+              <div class="btn-row">
+                <button class="primary" id="sync-pick">Choisir un dossier…</button>
+                <button class="ghost" id="sync-now" hidden>Synchroniser</button>
+                <button class="ghost" id="sync-off" hidden>Arrêter</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Sauvegarde -->
         <section data-panel="backup" hidden>
           <h3 class="set-title">Sauvegarde</h3>
@@ -611,6 +768,9 @@
   </div>
   <!-- Feuille mise en page uniquement pour l'impression -->
   <div id="printSheet" class="print-sheet" aria-hidden="true"></div>
+  <script src="i18n.js"></script>
+  <script src="quickadd.js"></script>
   <script src="renderer.js"></script>
+  <script src="extras.js"></script>
 </body>
 </html>
