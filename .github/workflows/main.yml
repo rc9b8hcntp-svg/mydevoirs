@@ -1,7 +1,7 @@
-name: Construire Mes Devoirs (Windows + macOS + Linux)
+name: Construire Mes Devoirs (Windows + macOS)
 
 # Ne démarre plus tout seul quand tu ajoutes des fichiers au dépôt :
-# onglet « Actions » → « Construire Mes Devoirs (Windows + macOS + Linux) » → « Run workflow ».
+# onglet « Actions » → « Construire Mes Devoirs (Windows + macOS) » → « Run workflow ».
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +20,7 @@ permissions:
   contents: write
 
 jobs:
-  # Calcule le numéro de version une seule fois pour tous les jobs (.msi, .dmg, Linux, tag et release)
+  # Calcule le numéro de version une seule fois pour tous les jobs (.msi, .dmg, tag et release)
   version:
     name: Choisir la version
     runs-on: ubuntu-latest
@@ -57,7 +57,6 @@ jobs:
   build:
     name: .msi ${{ matrix.label }}
     needs: version
-    # windows-2022 : environnement stable pour les outils WiX utilisés pour les .msi
     runs-on: windows-2022
     strategy:
       fail-fast: false
@@ -81,7 +80,6 @@ jobs:
         with:
           node-version: 22
 
-      # La version vient du job « Choisir la version » : même numéro pour le .msi, les fichiers et le tag
       - name: Appliquer la version
         shell: bash
         env:
@@ -100,7 +98,6 @@ jobs:
         run: |
           set -o pipefail
           if ! npx electron-builder --win msi --${{ matrix.arch }} --publish never 2>&1 | tee build.log; then
-            # Affiche la vraie raison de l'échec dans le résumé du run (pas seulement « exit code 1 »)
             MSG=$(tail -n 25 build.log | tr -d '\r' | tr '\n' ' ' | sed 's/%/%25/g')
             echo "::error title=Échec du build ${{ matrix.label }}::$MSG"
             exit 1
@@ -120,7 +117,6 @@ jobs:
           path: dist/*.msi
           if-no-files-found: error
 
-  # macOS : un .dmg pour Mac Apple Silicon (arm64) et un pour Mac Intel (x64)
   build-mac:
     name: .dmg ${{ matrix.label }}
     needs: version
@@ -155,7 +151,6 @@ jobs:
       - name: Installer les dépendances
         run: npm install --no-audit --no-fund
 
-      # Pas de compte Apple Developer : l'app est signée « ad hoc » (build/adhoc-sign.js) et non notariée
       - name: Construire le .dmg (${{ matrix.label }})
         shell: bash
         env:
@@ -182,73 +177,9 @@ jobs:
           path: dist/*.dmg
           if-no-files-found: error
 
-  # Linux : AppImage (marche partout) et .deb (Ubuntu, Debian, Mint…)
-  build-linux:
-    name: Linux ${{ matrix.label }}
-    needs: version
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            label: x64
-            runner: ubuntu-latest
-            artifact: MesDevoirs-linux-x64
-          - arch: arm64
-            label: ARM64
-            runner: ubuntu-24.04-arm
-            artifact: MesDevoirs-linux-arm64
-    steps:
-      - name: Récupérer le code
-        uses: actions/checkout@v4
-
-      - name: Installer Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Appliquer la version
-        shell: bash
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          npm pkg set version="$VERSION"
-          echo "Version : $VERSION"
-
-      - name: Installer les dépendances
-        run: npm install --no-audit --no-fund
-
-      - name: Construire AppImage et .deb (${{ matrix.label }})
-        shell: bash
-        run: |
-          set -o pipefail
-          if ! npx electron-builder --linux AppImage deb --${{ matrix.arch }} --publish never 2>&1 | tee build.log; then
-            MSG=$(tail -n 25 build.log | tr -d '\r' | tr '\n' ' ' | sed 's/%/%25/g')
-            echo "::error title=Échec du build Linux ${{ matrix.label }}::$MSG"
-            exit 1
-          fi
-
-      - name: Garder le journal du build en cas d'échec
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: journal-linux-${{ matrix.arch }}
-          path: build.log
-
-      - name: Envoyer les fichiers Linux (${{ matrix.label }})
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: |
-            dist/*.AppImage
-            dist/*.deb
-          if-no-files-found: error
-
   release:
     name: Publier la release
-    needs: [version, build, build-mac, build-linux]
-    # Publie même si une architecture a échoué, tant qu'au moins un installeur (.msi, .dmg, .AppImage ou .deb) existe
+    needs: [version, build, build-mac]
     if: ${{ !cancelled() && needs.version.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -272,13 +203,12 @@ jobs:
           NOTES="$(printf '%b' "$INPUT_NOTES")"
           ls -la dist
           shopt -s nullglob
-          FILES=(dist/*.msi dist/*.dmg dist/*.AppImage dist/*.deb)
+          FILES=(dist/*.msi dist/*.dmg)
           if [ ${#FILES[@]} -eq 0 ]; then
             echo "::error::Aucun installeur à publier : tous les builds ont échoué."
             exit 1
           fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            # Cas d'un « Re-run » : le tag existe déjà, on remplace juste les fichiers
             gh release upload "$TAG" "${FILES[@]}" --clobber --repo "$GITHUB_REPOSITORY"
             if [ -n "$NOTES" ]; then
               gh release edit "$TAG" --notes "$NOTES" --repo "$GITHUB_REPOSITORY"
