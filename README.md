@@ -1,6 +1,6 @@
 # 📚 Mes Devoirs
 
-Un petit logiciel (Windows, macOS et Linux) pour noter ses devoirs.
+Un petit logiciel Windows pour noter ses devoirs.
 
 ## Fonctionnalités
 
@@ -19,6 +19,15 @@ Un petit logiciel (Windows, macOS et Linux) pour noter ses devoirs.
 - **Notifications** : un rappel quotidien Windows (heure au choix, 18:00 par défaut) listant les devoirs à rendre aujourd'hui / demain / dans la semaine, et ceux en retard. Un clic sur la notification ouvre la bonne liste. Paramètres → Notifications
 - **Notifications avancées** (Paramètres → Notifications) : un rappel par devoir la veille de l'échéance, des boutons « Marquer fait » / « Rappeler demain » dans la notification (sans ouvrir l'appli), un rappel du matin (« tes devoirs du jour »), un mode vacances (coupe les rappels entre deux dates) et le choix du son (ou silencieux)
 - L'appli peut rester dans la zone de notification quand on ferme la fenêtre (pour que les rappels arrivent) et se lancer au démarrage de Windows
+- **Ajout rapide** (touche `Q`) : une phrase suffit, par ex. « maths ex 5 p 42 demain urgent 1h #groupe » (matière, date, priorité, durée et étiquettes sont reconnues ; aperçu en direct)
+- **Modèles de devoirs** avec étapes prêtes (exposé, contrôle, lecture…), modifiables et à créer soi-même
+- **Corbeille** (30 jours, avec restauration) : supprimer un devoir ne le perd plus ; Ctrl+Z reste disponible
+- **Archive automatique** des devoirs terminés depuis plus de N mois (Paramètres → Organisation), consultable et restaurable ; les statistiques les comptent toujours
+- **Import d'emploi du temps** depuis un fichier CSV, TXT, ICS ou JSON (Paramètres → Matières / Emploi du temps)
+- **Mini-widget** toujours visible (en retard / aujourd'hui / demain, cases à cocher), épinglable au-dessus des autres fenêtres, ouvrable depuis la zone de notification
+- **Synchronisation entre ordinateurs** via un dossier partagé (OneDrive, Dropbox, clé USB…) : le fichier `MesDevoirs-synchro.json` est fusionné, la modification la plus récente gagne
+- **Code de verrouillage** (verrouillage automatique après inactivité, `Ctrl+L`). Attention : il masque l'appli mais ne chiffre pas `devoirs.json`
+- **Français / English** (Paramètres → Confort)
 - Raccourcis : `Ctrl+N` nouveau devoir, `Ctrl+F` recherche
 
 ## Versions Windows
@@ -32,30 +41,6 @@ Chaque version est un installeur `.msi` :
 | ARM64 | `MesDevoirs-<version>-arm64.msi` |
 
 L'installeur crée un raccourci sur le Bureau et dans le menu Démarrer.
-
-## Version macOS
-
-Chaque version contient aussi des images disque `.dmg` :
-
-| Mac | Fichier produit |
-|---|---|
-| Apple Silicon (M1, M2, M3…) | `MesDevoirs-<version>-mac-arm64.dmg` |
-| Intel | `MesDevoirs-<version>-mac-x64.dmg` |
-
-Ouvre le `.dmg` et glisse **Mes Devoirs** dans **Applications**. Elles sont construites par le même workflow GitHub Actions (onglet Actions → « Construire Mes Devoirs (Windows + macOS) » → Run workflow), ou en local sur un Mac avec `npm install` puis `npm run dist:mac`.
-
-L'app n'est pas notariée par Apple (il faudrait un compte Apple Developer payant) : au **premier lancement**, fais **clic droit sur l'app → Ouvrir → Ouvrir**. Si macOS la dit « endommagée », exécute dans le Terminal : `xattr -cr "/Applications/Mes Devoirs.app"`.
-
-Sur Mac, les données sont dans `~/Library/Application Support/Mes Devoirs/devoirs.json`, et l'icône de rappel apparaît dans la barre des menus. L'option « Lancer au démarrage » utilise les éléments de connexion du Mac.
-
-## Version Linux
-
-| Format | Fichier produit |
-|---|---|
-| AppImage (x64 / ARM64) | `MesDevoirs-<version>-linux-<arch>.AppImage` (`chmod +x` puis double-clic) |
-| Debian / Ubuntu | `MesDevoirs-<version>-linux-<arch>.deb` (`sudo apt install ./fichier.deb`) |
-
-Sous Linux, la mise à jour dans l'appli ouvre la page de la release (pas d'installation automatique).
 
 ## Sauvegarde (export / import)
 

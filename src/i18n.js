@@ -240,6 +240,11 @@
     ['Afficher : Aujourd\'hui', 'Show: Today'], ['Afficher : À faire', 'Show: To do'], ['Afficher : En retard', 'Show: Late'],
     ['Afficher : Cette semaine', 'Show: This week'], ['Afficher : Terminés', 'Show: Done'], ['Afficher : Tous les devoirs', 'Show: All assignments'],
     ['Tape une action : nouveau devoir, thème sombre…', 'Type an action: new assignment, dark theme…'],
+    // --- Panneau d'accueil et groupes
+    ['Bonjour', 'Good morning'], ['Bon après-midi', 'Good afternoon'], ['Bonsoir', 'Good evening'], ['Bonne nuit', 'Good night'],
+    ["Tout est fait pour aujourd'hui ✨", 'All done for today ✨'], ["Rien de prévu aujourd'hui", 'Nothing planned for today'],
+    ["À faire aujourd'hui", 'To do today'], ['À faire cette semaine', 'To do this week'], ['Semaine', 'Week'],
+    ['Progression de la semaine', 'Progress this week'], ['Plus tard', 'Later'], ['Sans date', 'No date'],
     ['Tout sélectionner', 'Select all'], ['Annuler', 'Cancel'], ['Annuler la sélection', 'Cancel selection'],
     ['Aucun', 'None'], ['Oui', 'Yes'], ['Non', 'No'],
   ];
@@ -270,6 +275,7 @@
     [/^Changer la couleur de (.+)$/, (m) => `Change the colour of ${m[1]}`],
     [/^Retirer (.+)$/, (m) => `Remove ${m[1]}`],
     [/^(.+), (lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$/, (m) => `${m[1]}, ${tr(m[2])}`],
+    [/^Il te reste (\d+) devoirs? pour aujourd'hui$/, (m) => `You have ${num(m[1], 'assignment', 'assignments')} left for today`],
     [/^Mes Devoirs (\d[\w.\-]*)$/, (m) => `My Homework ${m[1]}`],
     [/^Cours : (.+)$/, (m) => `Classes: ${m[1]}`],
     [/^Mes Devoirs v(.+)$/, (m) => `My Homework v${m[1]}`],
@@ -371,7 +377,7 @@
   // ---------- Traduction de la page ----------
   const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE']);
   // Contenu écrit par l'utilisateur : jamais traduit
-  const NO_TR = '[data-notr], .item .title, .item .notes, .v-title, .v-notes, .tag.subject, .tag.hash, .cs, .ct, .ps-subject, .ps-notes, .box-title, .qp-title, .file-chip';
+  const NO_TR = '[data-notr], .item .title, .item .notes, .item .eyebrow, .v-title, .v-notes, .tag.subject, .tag.hash, .cs, .ct, .ps-subject, .ps-notes, .box-title, .qp-title, .file-chip';
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   let observer = null;
 
