@@ -13,6 +13,9 @@ const sync = require('./sync');
 const { parseSchedule } = require('./schedule-import');
 const i18n = require('./src/i18n');
 
+// Dépôt GitHub des mises à jour : fixe, l'interface ne peut pas le changer
+const UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
+
 // Langue de l'interface (aussi pour les notifications et les menus) : « fr » ou « en »
 let uiLang = 'fr';
 const T = (text) => i18n.tr(text, uiLang);
@@ -702,8 +705,8 @@ ipcMain.handle('link:open', (_e, url) => {
 });
 
 ipcMain.handle('app:version', () => app.getVersion());
-ipcMain.handle('update:check', async (_e, repo, tag) => {
-  const r = await checkForUpdate(repo, app.getVersion(), tag);
+ipcMain.handle('update:check', async (_e, _repo, tag) => {
+  const r = await checkForUpdate(UPDATE_REPO, app.getVersion(), tag);
   // L'adresse du fichier reste côté principal : l'interface ne peut pas choisir quoi télécharger
   lastAsset = r && r.asset ? r.asset : null;
   if (r && r.asset) r.asset = { name: r.asset.name, size: r.asset.size };
@@ -745,7 +748,7 @@ ipcMain.handle('update:download', async (e) => {
     downloading = false;
   }
 });
-ipcMain.handle('update:list', (_e, repo) => listReleases(repo));
+ipcMain.handle('update:list', () => listReleases(UPDATE_REPO));
 ipcMain.handle('update:open', (_e, url) => {
   // On n'ouvre que des pages GitHub
   if (typeof url === 'string' && /^https:\/\/github\.com\//.test(url)) {

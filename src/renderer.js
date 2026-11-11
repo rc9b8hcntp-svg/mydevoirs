@@ -1447,7 +1447,6 @@ function openSettings(tab) {
   $('s-start').value = state.settings.startFilter;
   $('s-prio').value = String(state.settings.defaultPriority);
   $('s-confirm').checked = !!state.settings.confirmDelete;
-  $('u-repo').value = state.settings.updateRepo || DEFAULT_UPDATE_REPO;
   fillNotifSettings();
   window.devoirsAPI.getVersion().then((v) => { $('u-version').textContent = `Mes Devoirs ${v}`; }).catch(() => {});
   if (!$('settings').open) $('settings').showModal();
@@ -1987,9 +1986,7 @@ async function runUpdateCheck() {
   btn.disabled = true;
   $('u-open').disabled = false;
   showUpdateStatus('', 'clock', 'Recherche en cours…', '');
-  const repo = $('u-repo').value.trim();
-  state.settings.updateRepo = repo;
-  persist();
+  const repo = DEFAULT_UPDATE_REPO;
   let r;
   try { r = await window.devoirsAPI.checkUpdate(repo, $('u-tag').value); } catch (e) { r = { status: 'error' }; }
   btn.disabled = false;
@@ -2010,7 +2007,6 @@ async function runUpdateCheck() {
       break;
     case 'no-repo':
       showUpdateStatus('bad', 'alert', 'Dépôt GitHub manquant', 'Écris le nom de ton dépôt (ex : pseudo/mes-devoirs) ci-dessous.');
-      $('u-repo').focus();
       break;
     case 'no-release':
       showUpdateStatus('bad', 'alert', 'Aucune version trouvée', $('u-tag').value ? 'Ce tag n\'existe pas (ou plus) dans les « Releases » du dépôt.' : 'Vérifie le nom du dépôt, ou publie une version dans « Releases » sur GitHub.');
@@ -2027,7 +2023,7 @@ async function runUpdateCheck() {
 async function loadTags() {
   const sel = $('u-tag');
   const wanted = state.settings.updateTag || '';
-  const repo = $('u-repo').value.trim() || state.settings.updateRepo || DEFAULT_UPDATE_REPO;
+  const repo = DEFAULT_UPDATE_REPO;
   let r;
   try { r = await window.devoirsAPI.listReleases(repo); } catch (e) { r = { status: 'error' }; }
   const tags = r && r.status === 'ok' ? r.releases : [];
@@ -2050,15 +2046,12 @@ async function loadTags() {
 }
 
 $('u-tag').addEventListener('change', (e) => { state.settings.updateTag = e.target.value; persist(); });
-$('u-repo').addEventListener('change', () => loadTags());
 
 $('u-check').addEventListener('click', runUpdateCheck);
 $('u-open').addEventListener('click', () => {
   if (updateCanInstall) installUpdate();
   else if (updateUrl) window.devoirsAPI.openUpdatePage(updateUrl);
 });
-$('u-repo').addEventListener('keydown', (e) => { if (e.key === 'Enter') runUpdateCheck(); });
-$('u-repo').addEventListener('change', (e) => { state.settings.updateRepo = e.target.value.trim(); persist(); });
 
 $('setClose').addEventListener('click', () => $('settings').close());
 $('settings').addEventListener('close', () => {
@@ -2870,6 +2863,7 @@ async function init() {
 
   const defaults = { theme: 'light', accent: 'indigo', sort: 'date', startFilter: 'todo', defaultPriority: '1', confirmDelete: true, updateRepo: DEFAULT_UPDATE_REPO, view: 'list', calMode: 'month', updateTag: '', language: 'fr', archiveMonths: 6, lockAfter: 0, widgetAuto: false };
   state.settings = Object.assign(defaults, data.settings);
+  state.settings.updateRepo = DEFAULT_UPDATE_REPO; // dépôt des mises à jour non modifiable
   state.settings.defaultPriority = String(state.settings.defaultPriority);
   state.settings.notifications = Object.assign({}, NOTIF_DEFAULTS, data.settings && data.settings.notifications);
 

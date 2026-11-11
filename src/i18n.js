@@ -195,7 +195,7 @@
     ['Version installée', 'Installed version'], ['Rechercher une mise à jour', 'Check for updates'], ['Version à rechercher', 'Version to look for'],
     ['« Dernière version » suit les nouveautés. Choisis un tag pour viser une version précise (ou revenir en arrière).', '“Latest version” follows new releases. Pick a tag to target a specific version (or go back).'],
     ['Dernière version', 'Latest version'], ['Télécharger', 'Download'], ['Dépôt GitHub des versions', 'GitHub repository for releases'],
-    ['Le nom de ton dépôt GitHub, par exemple', 'The name of your GitHub repository, for example'], ['. Les nouvelles versions sont celles publiées dans « Releases ».', '. New versions are those published in “Releases”.'],
+    
     ['Tu as la dernière version', 'You have the latest version'], ['Dépôt GitHub manquant', 'GitHub repository missing'], ['Écris le nom de ton dépôt (ex : pseudo/mes-devoirs) ci-dessous.', 'Write the name of your repository (e.g. username/my-homework) below.'],
     ['Aucune version trouvée', 'No version found'], ['Impossible de vérifier', 'Unable to check'], ['Vérifie ta connexion Internet puis réessaie.', 'Check your Internet connection and try again.'],
     ['La vérification a échoué', 'The check failed'], ['Réessaie dans quelques instants.', 'Try again in a few moments.'], ['Téléchargement en cours…', 'Downloading…'], ['Préparation…', 'Preparing…'],
