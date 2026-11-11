@@ -1,0 +1,42 @@
+name: Publier le wiki
+
+# Les pages du wiki sont dans le dossier « wiki » du dépôt.
+# Ne démarre jamais tout seul : onglet « Actions » → « Publier le wiki » → « Run workflow ».
+# À faire une seule fois : Settings → Features → cocher « Wikis », puis créer une première page
+# sur l'onglet « Wiki » (sinon le dépôt du wiki n'existe pas encore).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: true
+
+jobs:
+  wiki:
+    name: Envoyer les pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Publier dans le wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.wiki.git" wiki-repo
+          rsync -a --delete --exclude '.git' wiki/ wiki-repo/
+          cd wiki-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Rien à publier : le wiki est déjà à jour."
+            exit 0
+          fi
+          git commit -m "Mise à jour du wiki"
+          git push
