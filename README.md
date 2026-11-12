@@ -39,7 +39,7 @@ Sur l'écran d'accueil de Cartable OS, **Mes Devoirs a deux raccourcis**, qui ou
 
 Le bouton **Ouvrir** du panneau « Mes Devoirs » de l'accueil ouvre la version intégrée. Le menu de la zone de notification propose les deux.
 
-Les deux versions utilisent **le même fichier de données** : un devoir noté dans l'une est tout de suite dans l'autre, même si les deux sont ouvertes en même temps (chacune recharge quand l'autre enregistre). Dans la version intégrée, tout fonctionne : devoirs, calendrier, matières, modèles, corbeille, archive, code de verrouillage, sauvegardes (export / import), emploi du temps, synchronisation par dossier, impression et PDF. Seul ce qui dépend du logiciel à part est masqué : mini-widget, notifications Windows (et leur démarrage automatique), mise à jour. Les rappels continuent donc d'être envoyés par le logiciel à part, tant qu'il tourne en arrière-plan.
+Les deux versions utilisent **le même fichier de données** : un devoir noté dans l'une est tout de suite dans l'autre, même si les deux sont ouvertes en même temps (chacune recharge quand l'autre enregistre). Dans la version intégrée, tout fonctionne : devoirs, calendrier, matières, modèles, corbeille, archive, code de verrouillage, sauvegardes (export / import), emploi du temps, synchronisation par dossier, impression et PDF. Seul ce qui dépend du logiciel à part est masqué : mini-widget et notifications Windows (avec leur démarrage automatique). Les rappels continuent donc d'être envoyés par le logiciel à part, tant qu'il tourne en arrière-plan.
 
 Techniquement, la version intégrée affiche l'interface de `mes-devoirs/src` dans une vue de la fenêtre (`devoirs-embed.js`, `devoirs-embed-preload.js`). Le dossier `mes-devoirs/` reste celui du logiciel à part ; seule modification : il recharge ses données quand Cartable OS modifie le fichier (`watchDataFile` dans `mes-devoirs/main.js`).
 
@@ -78,7 +78,11 @@ Tests de la logique (emploi du temps, applications, lecture des devoirs, Mes Dev
 
 ## Mises à jour
 
-La mise à jour de Mes Devoirs (Paramètres → Mise à jour) télécharge désormais l'installeur `CartableOS-<version>-<architecture>.msi` de la dernière Release : elle met à jour les deux logiciels d'un coup.
+Les mises à jour se font **depuis Cartable OS (Réglages → Mise à jour)** ou depuis Mes Devoirs (Paramètres → Mise à jour, aussi dans la version intégrée) : elles téléchargent l'installeur `CartableOS-<version>-<architecture>.msi` de la dernière Release et mettent à jour **les deux logiciels d'un coup**.
+
+Le dépôt où chercher les mises à jour n'est plus écrit en dur : le build GitHub Actions le note lui-même (`build/update-repo.json` et `mes-devoirs/update-repo.json`, à partir de `GITHUB_REPOSITORY`). Les mises à jour viennent donc du dépôt qui a publié le `.msi`, quel que soit son nom. Pour un build local (pas sur GitHub), ces fichiers n'existent pas et la recherche de mise à jour dit « Dépôt GitHub inconnu ».
+
+Si Mes Devoirs ne s'ouvre pas, la raison est affichée en bas de l'écran d'accueil et écrite dans `%APPDATA%\Cartable OS\cartable.log`.
 
 ## Fichiers
 
@@ -89,6 +93,7 @@ La mise à jour de Mes Devoirs (Paramètres → Mise à jour) télécharge déso
 | `scheduler.js` | session (premier au dernier cours), cours en cours, prochain cours |
 | `apps.js` | liste et lancement des applications |
 | `devoirs-link.js` | lien avec Mes Devoirs (chemins, lecture des devoirs pour l'accueil) |
+| `updates.js`, `update-config.js` | mises à jour (recherche, téléchargement du .msi, dépôt noté par le build) |
 | `devoirs-embed.js`, `devoirs-embed-preload.js` | Mes Devoirs intégré : sauvegardes, fichiers, synchro, PDF… pour la vue dans la fenêtre |
 | `src/` | interface (`index.html`, `os.css`, `os.js`) |
 | `scripts/prepare-devoirs.js` | construit Mes Devoirs et le prépare pour l'installeur |

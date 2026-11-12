@@ -159,6 +159,16 @@ h2 { margin: 0; font: 600 15px/1.2 var(--font); letter-spacing: .01em; }
 .tile-sub { margin-top: -6px; font-size: 11.5px; color: var(--faint); text-align: center; line-height: 1.2; }
 .t-devoirs-embed { --c1: #6fe0b4; --c2: #1f9d73; }
 
+/* Réglages → Mise à jour */
+.upd-box { margin-top: 10px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: 6px; }
+.upd-box.new { border-color: rgba(123, 140, 255, .5); }
+.upd-box.ok { border-color: rgba(79, 211, 155, .45); }
+.upd-box.bad { border-color: rgba(255, 127, 134, .45); }
+.upd-sub { color: var(--muted); font-size: 13px; }
+.upd-box progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.upd-box .form-actions { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+.upd-notes { margin: 6px 0 0; max-height: 140px; overflow: auto; white-space: pre-wrap; font: 12.5px/1.45 var(--font); color: var(--muted); user-select: text; }
+
 /* Barre du haut quand Mes Devoirs est ouvert dans Cartable OS */
 .crumb { margin-left: 6px; height: 30px; padding: 0 12px 0 8px; gap: 6px; background: var(--panel); color: var(--text); }
 .crumb .ico { width: 16px; height: 16px; }

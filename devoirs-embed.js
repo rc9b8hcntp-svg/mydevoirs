@@ -59,6 +59,7 @@ function changePayload(d) {
  *   parentWindow()                        : fenêtre de Cartable OS (parent des boîtes de dialogue)
  *   sendToView(channel, payload)          : message vers l'interface de Mes Devoirs
  *   onSaved()                             : appelé après chaque enregistrement (pour rafraîchir l'accueil)
+ *   updater                               : mises à jour (voir updates.js)
  */
 function createEmbed(deps) {
   const { ipcMain, dialog, shell, app } = deps;
@@ -286,6 +287,12 @@ function createEmbed(deps) {
 
     on('backup:cancel', () => { pendingImport = null; return true; });
 
+    // ----- Mises à jour : celles de Cartable OS (un seul .msi pour les deux logiciels) -----
+    on('update:check', (_e, _repo, tag) => deps.updater.check(tag)); // le dépôt est fixé par le build, l'interface ne le choisit pas
+    on('update:list', () => deps.updater.list());
+    on('update:download', (e) => deps.updater.download((p) => { if (!e.sender.isDestroyed()) e.sender.send('update:progress', p); }));
+    on('update:open', (_e, url) => deps.updater.openPage(url));
+
     // ----- Impression et PDF (de la vue de Mes Devoirs seulement) -----
     on('print:run', (e) => new Promise((resolve) => {
       try {
@@ -339,10 +346,10 @@ function createEmbed(deps) {
 }
 
 // Ce que l'interface de Mes Devoirs ne peut pas faire une fois intégrée : elles appartiennent au logiciel à part
-// (mini-widget, notifications Windows, mise à jour). On les masque dans l'interface intégrée.
+// (mini-widget, notifications Windows). On les masque dans l'interface intégrée. L'onglet « Mise à jour » reste :
+// il met à jour Cartable OS et Mes Devoirs ensemble.
 const HIDE_CSS = [
   '#widgetBtn',
-  '[data-tab="update"]',
   '.group:has(#w-open)',
   '.setting:has(#n-bg)',
   '.setting:has(#n-startup)',

@@ -301,8 +301,6 @@ test('les actions du logiciel à part répondent « indisponible » sans planter
   assert.strictEqual(await api.toggleWidget(true), false);
   assert.strictEqual(await api.widgetState(), false);
   assert.deepStrictEqual(await api.testNotification(), { ok: false });
-  assert.strictEqual((await api.checkUpdate()).status, 'error');
-  assert.strictEqual((await api.listReleases()).status, 'error');
 });
 
 test('chaque canal « dv: » appelé par le preload est bien servi par le programme principal', () => {
@@ -333,17 +331,18 @@ test('nettoyage des données reçues de l\'interface', () => {
 
 test('la vue intégrée masque ce qui appartient au logiciel à part', () => {
   const { HIDE_CSS } = require('../devoirs-embed');
-  ['#widgetBtn', '[data-tab="update"]', '#w-open', '#n-bg', '#n-startup', '#n-test'].forEach((sel) => assert.ok(HIDE_CSS.includes(sel), sel));
+  ['#widgetBtn', '#w-open', '#n-bg', '#n-startup', '#n-test'].forEach((sel) => assert.ok(HIDE_CSS.includes(sel), sel));
+  assert.ok(!HIDE_CSS.includes('data-tab="update"'), 'l\'onglet Mise à jour reste visible : il met à jour les deux logiciels');
   // ces éléments existent vraiment dans l'interface de Mes Devoirs (sinon le CSS ne masquerait rien)
   const html = fs.readFileSync(path.join(__dirname, '..', 'mes-devoirs', 'src', 'index.html'), 'utf8');
-  ['id="widgetBtn"', 'data-tab="update"', 'id="w-open"', 'id="n-bg"', 'id="n-startup"', 'id="n-test"'].forEach((frag) => assert.ok(html.includes(frag), frag));
+  ['id="widgetBtn"', 'id="w-open"', 'id="n-bg"', 'id="n-startup"', 'id="n-test"'].forEach((frag) => assert.ok(html.includes(frag), frag));
 });
 
 test('le .msi embarque tous les fichiers dont la vue intégrée a besoin', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   const files = pkg.build.files;
-  ['devoirs-embed.js', 'devoirs-embed-preload.js', 'mes-devoirs/src/**/*', 'mes-devoirs/backup.js', 'mes-devoirs/sync.js', 'mes-devoirs/schedule-import.js'].forEach((f) => assert.ok(files.includes(f), `absent de build.files : ${f}`));
-  // tout ce que devoirs-embed.js charge depuis mes-devoirs/, y compris ce que ces fichiers chargent à leur tour, est dans la liste
+  ['devoirs-embed.js', 'devoirs-embed-preload.js', 'updates.js', 'update-config.js', 'build/update-repo.json', 'mes-devoirs/src/**/*', 'mes-devoirs/backup.js', 'mes-devoirs/sync.js', 'mes-devoirs/schedule-import.js', 'mes-devoirs/updater.js', 'mes-devoirs/downloader.js'].forEach((f) => assert.ok(files.includes(f), `absent de build.files : ${f}`));
+  // tout ce que main.js charge, y compris ce que ces fichiers chargent à leur tour, est dans la liste (sinon l'appli installée planterait au lancement)
   const root = path.join(__dirname, '..');
   const seen = new Set();
   const walk = (rel) => {
@@ -353,16 +352,90 @@ test('le .msi embarque tous les fichiers dont la vue intégrée a besoin', () =>
     [...src.matchAll(/require\('(\.[^']+)'\)/g)].forEach((m) => {
       const target = path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1]));
       const file = fs.existsSync(path.join(root, `${target}.js`)) ? `${target}.js` : target;
-      if (!file.startsWith('mes-devoirs/') && rel === 'devoirs-embed.js') return;
-      if (file.startsWith('mes-devoirs/')) {
-        const covered = files.some((f) => f === file || (f.endsWith('/**/*') && file.startsWith(f.slice(0, -4))));
-        assert.ok(covered, `non embarqué : ${file} (chargé par ${rel})`);
-      }
+      const covered = files.some((f) => f === file || (f.endsWith('/**/*') && file.startsWith(f.slice(0, -4))));
+      assert.ok(covered, `non embarqué : ${file} (chargé par ${rel})`);
       if (fs.existsSync(path.join(root, file))) walk(file);
     });
   };
-  walk('devoirs-embed.js');
+  walk('main.js');
+  assert.ok(seen.has('devoirs-embed.js') && seen.has('updates.js'));
   assert.ok(seen.has('mes-devoirs/notifier.js'), 'la chaîne de dépendances est bien suivie jusqu\'à notifier.js');
+});
+
+group('mises à jour (updates.js, update-config.js)');
+
+test('dépôt des mises à jour : lu dans update-repo.json, sinon vide (pas de dépôt deviné)', () => {
+  const { readRepo } = require('../update-config');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cartable-upd-'));
+  const f = path.join(dir, 'update-repo.json');
+  assert.strictEqual(readRepo(f), '');
+  assert.strictEqual(readRepo(f, 'a/b'), 'a/b');
+  fs.writeFileSync(f, JSON.stringify({ repo: 'moi/cartable-os' }));
+  assert.strictEqual(readRepo(f), 'moi/cartable-os');
+  fs.writeFileSync(f, JSON.stringify({ repo: 'pas un depot ; rm -rf' }));
+  assert.strictEqual(readRepo(f), '');
+  fs.writeFileSync(f, '{ cassé');
+  assert.strictEqual(readRepo(f), '');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('mise à jour : recherche, téléchargement du .msi, ouverture puis fermeture de Cartable OS', async () => {
+  const { createUpdater } = require('../updates');
+  const { checkForUpdate } = require('../mes-devoirs/updater');
+  const asset = { name: 'CartableOS-1.0.9-x64.msi', browser_download_url: 'https://github.com/moi/cartable-os/releases/download/v1.0.9/CartableOS-1.0.9-x64.msi', size: 1234, digest: `sha256:${'a'.repeat(64)}` };
+  const fetchFn = async (url) => {
+    assert.ok(url.startsWith('https://api.github.com/repos/moi/cartable-os/releases/latest'), url);
+    return { ok: true, status: 200, json: async () => ({ tag_name: 'v1.0.9', html_url: 'https://github.com/moi/cartable-os/releases/tag/v1.0.9', body: 'Mes Devoirs intégré', assets: [asset] }) };
+  };
+  const log = { opened: [], quit: 0, downloaded: [], external: [] };
+  const up = createUpdater({
+    repo: () => 'moi/cartable-os', version: () => '1.0.3', tempDir: () => os.tmpdir(),
+    shell: { openPath: async (p) => { log.opened.push(p); return ''; }, openExternal: (u) => log.external.push(u) },
+    quit: () => { log.quit++; },
+    checkForUpdate: (repo, v, tag) => checkForUpdate(repo, v, tag, fetchFn, 'x64'),
+    listReleases: async () => ({ status: 'ok', releases: [] }),
+    downloadFile: async (o) => { log.downloaded.push(o); o.onProgress({ received: 1234, total: 1234 }); return { ok: true }; },
+  });
+  assert.deepStrictEqual(await up.download(), { ok: false, reason: 'no-asset' }, 'rien à télécharger avant d\'avoir cherché');
+  const r = await up.check('');
+  assert.strictEqual(r.status, 'available');
+  assert.deepStrictEqual(r.asset, { name: 'CartableOS-1.0.9-x64.msi', size: 1234 }, 'l\'interface ne voit ni l\'adresse ni l\'empreinte');
+  const seen = [];
+  assert.deepStrictEqual(await up.download((p) => seen.push(p)), { ok: true });
+  assert.strictEqual(log.downloaded[0].url, asset.browser_download_url);
+  assert.strictEqual(log.downloaded[0].sha256, 'a'.repeat(64));
+  assert.ok(/CartableOS-update/.test(log.downloaded[0].dest) && /CartableOS-1\.0\.9-x64\.msi$/.test(log.opened[0]));
+  assert.strictEqual(seen.length, 1);
+  assert.strictEqual(log.quit, 1, 'Cartable OS se ferme pour laisser l\'installateur faire son travail');
+  assert.strictEqual(up.openPage('https://github.com/moi/cartable-os/releases'), true);
+  assert.strictEqual(up.openPage('https://evil.example/x'), false);
+  assert.strictEqual(up.openPage('file:///C:/x'), false);
+});
+
+test('mise à jour : adresse de téléchargement hors GitHub refusée, échec du téléchargement sans fermer l\'appli', async () => {
+  const { createUpdater } = require('../updates');
+  const mk = (asset, dl) => {
+    const q = { quit: 0 };
+    const up = createUpdater({
+      repo: () => 'moi/x', version: () => '1.0.0', tempDir: () => os.tmpdir(), shell: { openPath: async () => '', openExternal() {} }, quit: () => { q.quit++; },
+      checkForUpdate: async () => ({ status: 'available', latest: '2.0.0', asset }), listReleases: async () => ({}), downloadFile: dl,
+    });
+    return { up, q };
+  };
+  let a = mk({ name: 'x-x64.msi', url: 'https://evil.example/x-x64.msi', size: 1 }, async () => ({ ok: true }));
+  await a.up.check('');
+  assert.deepStrictEqual(await a.up.download(), { ok: false, reason: 'no-asset' });
+  a = mk({ name: 'CartableOS-2.0.0-x64.msi', url: 'https://github.com/moi/x/releases/download/v2.0.0/CartableOS-2.0.0-x64.msi', size: 1 }, async () => ({ ok: false, reason: 'network' }));
+  await a.up.check('');
+  assert.deepStrictEqual(await a.up.download(), { ok: false, reason: 'network' });
+  assert.strictEqual(a.q.quit, 0);
+  assert.deepStrictEqual(await a.up.download(), { ok: false, reason: 'network' }, 'on peut réessayer après un échec');
+});
+
+test('sans dépôt connu (build local), la recherche répond « no-repo » sans appeler Internet', async () => {
+  const { checkForUpdate } = require('../mes-devoirs/updater');
+  const r = await checkForUpdate('', '1.0.0', '', async () => { throw new Error('ne doit pas être appelé'); });
+  assert.deepStrictEqual(r, { status: 'no-repo' });
 });
 
 (async () => {

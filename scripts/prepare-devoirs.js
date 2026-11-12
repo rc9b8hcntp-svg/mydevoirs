@@ -30,6 +30,20 @@ function run(cmd) {
   }
 }
 
+// Dépôt GitHub des mises à jour : celui qui construit l'installeur (dans GitHub Actions, GITHUB_REPOSITORY = « pseudo/depot »).
+// Écrit pour Cartable OS (build/update-repo.json) ET pour Mes Devoirs (mes-devoirs/update-repo.json) : les deux
+// cherchent leurs mises à jour dans les Releases du même dépôt, où ils trouvent le .msi qui met tout à jour.
+const repo = (process.env.GITHUB_REPOSITORY || '').trim();
+if (/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+  const body = `${JSON.stringify({ repo }, null, 2)}\n`;
+  fs.mkdirSync(path.join(root, 'build'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'build', 'update-repo.json'), body);
+  fs.writeFileSync(path.join(devDir, 'update-repo.json'), body);
+  console.log(`Dépôt des mises à jour : ${repo}`);
+} else {
+  console.log('Dépôt des mises à jour : inconnu (build local, pas GitHub Actions). Les mises à jour automatiques seront désactivées.');
+}
+
 // Mes Devoirs a le même numéro de version que Cartable OS (c'est ce que compare sa mise à jour)
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const devPkgFile = path.join(devDir, 'package.json');

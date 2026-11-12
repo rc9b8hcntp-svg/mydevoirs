@@ -26,6 +26,7 @@
       "downloader.js",
       "sync.js",
       "schedule-import.js",
+      "update-repo.json",
       "widget-preload.js",
       "src/**/*",
       "build/icon.png"

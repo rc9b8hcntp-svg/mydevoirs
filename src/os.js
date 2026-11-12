@@ -93,9 +93,12 @@ const REASONS = {
   missing: 'Mes Devoirs intégré est introuvable. Réinstalle Cartable OS.',
 };
 
+// Message d'erreur + détail technique (chemin, erreur Windows) pour comprendre pourquoi quelque chose ne s'ouvre pas
+const failText = (r, fallback) => `${REASONS[r.reason] || fallback}${r.detail ? ` (${r.detail})` : ''}`;
+
 async function launch(id) {
   const r = await api.launch(id);
-  if (r && !r.ok) toast(REASONS[r.reason] || 'Impossible de l\'ouvrir.', true);
+  if (r && !r.ok) toast(failText(r, 'Impossible de l\'ouvrir.'), true);
 }
 
 // ---------- Accueil ----------
@@ -434,6 +437,129 @@ function sectionApps() {
   return sec;
 }
 
+// ---------- Mise à jour ----------
+const upd = { busy: false, kind: '', title: '', sub: '', result: null, pct: null, failed: false };
+
+function setUpd(kind, title, sub, result) {
+  Object.assign(upd, { kind, title, sub: sub || '', result: result || null });
+}
+
+const INSTALL_ERRORS = {
+  network: 'Le téléchargement a échoué. Vérifie ta connexion Internet puis réessaie.',
+  size: 'Le fichier téléchargé est incomplet. Réessaie.',
+  hash: 'Le fichier téléchargé est abîmé. Réessaie.',
+  disk: 'Impossible d\'écrire le fichier sur le disque.',
+  launch: 'Le fichier est téléchargé mais l\'installateur ne s\'est pas ouvert.',
+  busy: 'Un téléchargement est déjà en cours.',
+  'no-asset': 'Aucun installeur trouvé pour ton ordinateur.',
+};
+
+async function checkUpdates() {
+  if (upd.busy) return;
+  upd.busy = true;
+  upd.failed = false;
+  setUpd('', 'Recherche en cours…', '');
+  renderDrawer();
+  let r;
+  try { r = await api.checkUpdate(''); } catch (e) { r = { status: 'error' }; }
+  upd.busy = false;
+  switch (r && r.status) {
+    case 'available':
+      setUpd('new', `La version ${r.latest} est disponible`, 'Un seul installeur met à jour Cartable OS et Mes Devoirs ensemble.', r);
+      break;
+    case 'older':
+      setUpd('new', `La version ${r.latest} est plus ancienne que la tienne`, '', r);
+      break;
+    case 'up-to-date':
+      setUpd('ok', 'Tu as la dernière version', `Version ${r.latest}`);
+      break;
+    case 'no-repo':
+      setUpd('bad', 'Dépôt GitHub inconnu', 'Cette version n\'a pas été construite par GitHub Actions, elle ne sait pas où chercher les mises à jour. Installe le .msi d\'une Release.');
+      break;
+    case 'no-release':
+      setUpd('bad', 'Aucune version trouvée', 'Aucune Release n\'est publiée sur le dépôt GitHub. Lance « Construire Cartable OS » dans l\'onglet Actions.');
+      break;
+    case 'network':
+      setUpd('bad', 'Impossible de vérifier', 'Vérifie ta connexion Internet puis réessaie.');
+      break;
+    default:
+      setUpd('bad', 'La vérification a échoué', 'Réessaie dans quelques instants.');
+  }
+  renderDrawer();
+}
+
+async function installUpdate() {
+  if (upd.busy || !upd.result) return;
+  const page = upd.result.url;
+  upd.busy = true;
+  upd.pct = 0;
+  const latest = upd.result;
+  setUpd('', 'Téléchargement en cours…', 'Préparation…', latest);
+  renderDrawer();
+  let r;
+  try { r = await api.downloadUpdate(); } catch (e) { r = { ok: false, reason: 'network' }; }
+  upd.busy = false;
+  upd.pct = null;
+  if (r && r.ok) {
+    setUpd('ok', 'L\'installateur est ouvert', 'Cartable OS va se fermer pour laisser l\'installation se faire. Suis les étapes de l\'installateur.');
+  } else {
+    upd.failed = true;
+    setUpd('bad', 'Installation impossible', INSTALL_ERRORS[r && r.reason] || 'Une erreur est survenue. Réessaie.', { ...latest, url: page, asset: null });
+  }
+  renderDrawer();
+}
+
+const mo = (n) => `${(n / 1048576).toFixed(1).replace('.', ',')} Mo`;
+
+function sectionUpdate() {
+  const sec = el('section', 'sec');
+  sec.append(el('h3', '', 'Mise à jour'));
+  sec.append(el('p', 'hint', 'Cartable OS et Mes Devoirs sont dans le même installeur : une seule mise à jour pour les deux.'));
+  const row = el('div', 'row');
+  const m = el('div', 'row-main');
+  m.append(el('div', 'row-title', `Version ${state.version}`), el('div', 'row-sub', 'Cartable OS + Mes Devoirs'));
+  const b = el('button', 'btn btn-soft btn-sm', 'Rechercher une mise à jour');
+  b.type = 'button';
+  b.disabled = upd.busy;
+  b.addEventListener('click', checkUpdates);
+  row.append(m, b);
+  sec.append(row);
+  if (upd.title) {
+    const box = el('div', `upd-box ${upd.kind}`);
+    box.append(el('strong', '', upd.title));
+    const sub = el('span', 'upd-sub', upd.sub);
+    sub.id = 'updSub';
+    box.append(sub);
+    if (upd.pct !== null) {
+      const bar = document.createElement('progress');
+      bar.max = 100;
+      bar.value = upd.pct;
+      bar.id = 'updBar';
+      box.append(bar);
+    }
+    const r = upd.result;
+    if (r && !upd.busy) {
+      const acts = el('div', 'form-actions');
+      if (r.asset) {
+        const go = el('button', 'btn btn-primary btn-sm', `Télécharger et installer la ${r.latest}`);
+        go.type = 'button';
+        go.addEventListener('click', installUpdate);
+        acts.append(go);
+      }
+      if (r.url) {
+        const pg = el('button', 'btn btn-ghost btn-sm', 'Ouvrir la page de téléchargement');
+        pg.type = 'button';
+        pg.addEventListener('click', () => api.openUpdatePage(r.url));
+        acts.append(pg);
+      }
+      box.append(acts);
+      if (r.notes) { const n = el('pre', 'upd-notes'); n.textContent = r.notes.slice(0, 1500); box.append(n); }
+    }
+    sec.append(box);
+  }
+  return sec;
+}
+
 function sectionSession() {
   const sec = el('section', 'sec');
   sec.append(el('h3', '', 'Session'));
@@ -461,7 +587,7 @@ function renderDrawer() {
   const body = $('drawerBody');
   const top = body.scrollTop;
   body.textContent = '';
-  body.append(sectionScheduleSettings(), sectionFolders(), sectionApps(), sectionSession(), sectionQuit());
+  body.append(sectionScheduleSettings(), sectionFolders(), sectionApps(), sectionSession(), sectionUpdate(), sectionQuit());
   body.scrollTop = top;
 }
 
@@ -477,8 +603,13 @@ async function importSchedule() {
 }
 
 // ---------- Mise en route ----------
+let shownDvError = '';
 function renderAll() {
   if (!state) return;
+  // Mes Devoirs intégré n'a pas pu s'afficher : on le dit une fois (la raison est aussi dans cartable.log)
+  const dvErr = state.devoirs ? state.devoirs.error : '';
+  if (dvErr && dvErr !== shownDvError) toast(`Mes Devoirs intégré n'a pas pu s'afficher : ${dvErr}`, true);
+  shownDvError = dvErr || '';
   $('winBtns').hidden = state.locked;
   const embedded = !!(state.devoirs && state.devoirs.embedded);
   $('btnHome').hidden = !embedded;
@@ -500,11 +631,20 @@ function init() {
   $('closeSettings').addEventListener('click', closeDrawer);
   $('scrim').addEventListener('click', closeDrawer);
   // Le bouton du panneau ouvre Mes Devoirs dans Cartable OS (le logiciel à part a son propre raccourci)
-  $('dvOpen').addEventListener('click', async () => { const r = await api.openDevoirsEmbedded(); if (r && !r.ok) toast(REASONS[r.reason] || 'Impossible d\'ouvrir Mes Devoirs.', true); });
+  $('dvOpen').addEventListener('click', async () => { const r = await api.openDevoirsEmbedded(); if (r && !r.ok) toast(failText(r, 'Impossible d\'ouvrir Mes Devoirs.'), true); });
   $('btnMin').addEventListener('click', () => api.minimize());
   $('btnHide').addEventListener('click', () => api.hide());
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawerOpen) closeDrawer(); });
 
+  // Progression du téléchargement : on met à jour la barre sans refaire tout le panneau
+  api.onUpdateProgress(({ received, total }) => {
+    if (!upd.busy) return;
+    upd.pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : null;
+    const bar = $('updBar');
+    const sub = $('updSub');
+    if (bar && upd.pct !== null) bar.value = upd.pct;
+    if (sub) sub.textContent = total > 0 ? `${upd.pct} % · ${mo(received)} sur ${mo(total)}` : mo(received);
+  });
   api.onState((s) => { state = s; renderAll(); });
   api.getState().then((s) => { state = s; renderAll(); });
 

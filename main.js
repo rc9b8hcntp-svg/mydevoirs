@@ -9,6 +9,10 @@ const { computeStatus, watchWindow } = require('./scheduler');
 const appsLib = require('./apps');
 const devoirs = require('./devoirs-link');
 const devoirsEmbed = require('./devoirs-embed');
+const updates = require('./updates');
+const { readRepo } = require('./update-config');
+const { checkForUpdate, listReleases } = require('./mes-devoirs/updater');
+const { downloadFile } = require('./mes-devoirs/downloader');
 
 app.setAppUserModelId('fr.maxence.cartableos');
 
@@ -138,9 +142,10 @@ async function openDevoirs() {
     } catch (e) { return { ok: false, reason: 'not-installed' }; }
   }
   const exe = devoirs.exePath(process.execPath);
-  if (!fs.existsSync(exe)) return { ok: false, reason: 'not-installed' };
+  if (!fs.existsSync(exe)) { logLine(`Mes Devoirs (logiciel à part) introuvable : ${exe}`); return { ok: false, reason: 'not-installed', detail: exe }; }
   const err = await shell.openPath(exe);
-  return err ? { ok: false, reason: 'launch' } : { ok: true };
+  if (err) logLine(`Mes Devoirs (logiciel à part) ne s'ouvre pas : ${err} (${exe})`);
+  return err ? { ok: false, reason: 'launch', detail: err } : { ok: true };
 }
 
 // L'installeur (.msi) copie Mes Devoirs à côté de Cartable OS ; ses raccourcis (menu Démarrer et Bureau) sont créés ici,
@@ -161,6 +166,29 @@ function ensureDevoirsShortcuts() {
   } catch (e) { /* on réessaiera au prochain lancement */ }
 }
 
+// ---------- Journal ----------
+// Si quelque chose ne s'ouvre pas, la raison est écrite dans %APPDATA%\Cartable OS\cartable.log
+function logLine(text) {
+  try {
+    const file = path.join(app.getPath('userData'), 'cartable.log');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    try { if (fs.statSync(file).size > 200 * 1024) fs.rmSync(file); } catch (e) { /* pas encore de journal */ }
+    fs.appendFileSync(file, `${new Date().toISOString()} ${String(text).slice(0, 2000)}\n`, 'utf8');
+  } catch (e) { /* journal impossible : tant pis */ }
+}
+
+// ---------- Mises à jour (Cartable OS + Mes Devoirs, un seul installeur) ----------
+const updater = updates.createUpdater({
+  repo: () => readRepo(path.join(__dirname, 'build', 'update-repo.json')),
+  version: () => app.getVersion(),
+  tempDir: () => app.getPath('temp'),
+  shell,
+  checkForUpdate,
+  listReleases,
+  downloadFile,
+  quit: () => setTimeout(() => { quitting = true; app.quit(); }, 2000),
+});
+
 // ---------- Mes Devoirs intégré (dans la fenêtre de Cartable OS) ----------
 // Le même logiciel que Mes Devoirs, mais son interface s'affiche directement sous la barre de Cartable OS, dans une vue
 // de la fenêtre. Mêmes données que le logiciel à part (voir devoirs-embed.js).
@@ -168,6 +196,7 @@ const BAR_HEIGHT = 52; // hauteur de la barre du haut (.bar dans os.css) : la vu
 const DEVOIRS_UI = path.join(__dirname, 'mes-devoirs', 'src', 'index.html');
 let dvView = null;
 let dvShown = false;
+let dvError = '';   // dernière raison pour laquelle la vue n'a pas pu s'afficher (montrée dans l'interface)
 
 const embedBridge = devoirsEmbed.createEmbed({
   ipcMain, dialog, shell, app,
@@ -176,6 +205,7 @@ const embedBridge = devoirsEmbed.createEmbed({
   parentWindow: () => (win && !win.isDestroyed() ? win : undefined),
   sendToView: (channel, payload) => { if (dvView && !dvView.webContents.isDestroyed()) dvView.webContents.send(channel, payload); },
   onSaved: () => { if (dvShown) pushState(false); },
+  updater,
 });
 embedBridge.register();
 
@@ -204,13 +234,25 @@ function ensureDevoirsView() {
   wc.on('will-navigate', (e) => e.preventDefault());
   // Ce qui appartient au logiciel à part (mini-widget, notifications Windows, mise à jour) est masqué dans la vue intégrée
   wc.on('dom-ready', () => { wc.insertCSS(devoirsEmbed.HIDE_CSS).catch(() => {}); });
+  // Si l'interface ne se charge pas, on le dit (et on l'écrit dans le journal) au lieu d'afficher une page vide
+  wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => { if (isMainFrame) failDevoirsView(`la page ne se charge pas (${desc} ${code}) : ${url}`); });
+  wc.on('preload-error', (_e, file, err) => failDevoirsView(`le pont de Mes Devoirs ne démarre pas : ${err && err.message ? err.message : err}`));
+  wc.on('render-process-gone', (_e, d) => failDevoirsView(`la vue s'est arrêtée (${d && d.reason})`));
   win.contentView.addChildView(dvView);
   wc.loadFile(DEVOIRS_UI);
   return dvView;
 }
 
+function failDevoirsView(why) {
+  logLine(`Mes Devoirs intégré : ${why}`);
+  dvError = why;
+  destroyDevoirsView(); // la prochaine ouverture repart de zéro
+  pushState(true);
+}
+
 function openDevoirsEmbedded() {
-  if (!devoirsEmbedAvailable()) return { ok: false, reason: 'missing' };
+  dvError = '';
+  if (!devoirsEmbedAvailable()) { logLine(`Mes Devoirs intégré : fichier introuvable : ${DEVOIRS_UI}`); return { ok: false, reason: 'missing', detail: DEVOIRS_UI }; }
   if (!win || win.isDestroyed()) return { ok: false, reason: 'launch' };
   const first = !dvView;
   const view = ensureDevoirsView();
@@ -381,6 +423,7 @@ function publicState(now) {
       installed: devoirsInstalled(),
       embedAvailable: devoirsEmbedAvailable(),
       embedded: dvShown,
+      error: dvError,
       summary: devoirs.summarize(homework(), new Date(now), cur ? subjectOf(cur.summary) : ''),
     },
   };
@@ -560,6 +603,11 @@ handle('folder:open', async (name) => {
   if (!n) return { ok: false };
   return { ok: await openFolder(subjectFolder(n)) };
 });
+
+// Mises à jour (un seul .msi pour Cartable OS et Mes Devoirs)
+handle('update:check', (tag) => updater.check(tag));
+ipcMain.handle('update:download', (e) => (fromUi(e) ? updater.download((p) => { if (!e.sender.isDestroyed()) e.sender.send('update:progress', p); }) : undefined));
+handle('update:open', (url) => updater.openPage(url));
 
 handle('devoirs:open', () => openDevoirs());
 handle('devoirs:openEmbedded', () => openDevoirsEmbedded());

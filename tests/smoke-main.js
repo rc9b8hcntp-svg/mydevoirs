@@ -33,9 +33,9 @@ class FakeWin {
 const viewLog = { send: [], css: [], loaded: [], views: [] };
 class FakeView {
   constructor(opts) {
-    this.opts = opts; this.visible = true; this.bounds = null; this.destroyed = false;
+    this.opts = opts; this.visible = true; this.bounds = null; this.destroyed = false; this.wcHandlers = {};
     this.webContents = {
-      send: (c, p) => viewLog.send.push([c, p]), setWindowOpenHandler() {}, on() {}, focus() {}, isDestroyed: () => this.destroyed,
+      send: (c, p) => viewLog.send.push([c, p]), setWindowOpenHandler() {}, on: (e, f) => { this.wcHandlers[e] = f; }, focus() {}, isDestroyed: () => this.destroyed,
       insertCSS: async (css) => { viewLog.css.push(css); }, loadFile: (f) => { viewLog.loaded.push(f); }, close: () => { this.destroyed = true; },
     };
     viewLog.views.push(this);
@@ -202,6 +202,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert.strictEqual(changed.length, 1, 'la vue est prévenue quand le logiciel à part modifie les devoirs');
   assert.strictEqual(changed[0][1].homework.length, 2);
 
+  // Mises à jour : sans dépôt connu (build local) on le dit au lieu d'échouer en silence ; l'interface intégrée a le même accès
+  assert.deepStrictEqual(await handlers['update:check'](e, ''), { status: 'no-repo' });
+  assert.deepStrictEqual(await handlers['dv:update:check'](ve, '', ''), { status: 'no-repo' });
+  assert.strictEqual(await handlers['dv:update:check']({ sender: win.webContents }, '', ''), undefined, 'seule la vue de Mes Devoirs a accès à ce canal');
+  assert.strictEqual(await handlers['update:check']({ sender: {} }, ''), undefined, 'seule l\'interface de Cartable OS a accès à ce canal');
+  assert.deepStrictEqual(await handlers['update:download'](e), { ok: false, reason: 'no-asset' });
+  assert.strictEqual(await handlers['update:open'](e, 'https://example.fr'), false);
+
   // « Accueil » range la vue ; ranger la fenêtre aussi
   assert.deepStrictEqual(await handlers['devoirs:closeEmbedded'](e), { ok: true });
   assert.strictEqual(view.visible, false);
@@ -212,6 +220,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await handlers['win:hide'](e);
   assert.strictEqual(view.visible, false, 'la fenêtre rangée → retour à l\'accueil');
   assert.strictEqual((await handlers['state:get']({ sender: win.webContents })).devoirs.embedded, false);
+
+  // Si l'interface de Mes Devoirs ne peut pas se charger : on le dit, on l'écrit dans le journal, et on peut réessayer
+  const before = viewLog.views.length;
+  await handlers['devoirs:openEmbedded'](e);
+  const v2 = viewLog.views[viewLog.views.length - 1];
+  v2.wcHandlers['preload-error'](null, 'x.js', new Error('boum'));
+  const stErr = await handlers['state:get'](e);
+  assert.ok(/boum/.test(stErr.devoirs.error), 'la raison s\'affiche dans l\'interface');
+  assert.strictEqual(stErr.devoirs.embedded, false);
+  assert.ok(v2.destroyed, 'la vue cassée est détruite');
+  assert.ok(/boum/.test(fs.readFileSync(path.join(tmp, 'userData', 'cartable.log'), 'utf8')), 'et écrite dans cartable.log');
+  assert.deepStrictEqual(await handlers['devoirs:openEmbedded'](e), { ok: true });
+  assert.strictEqual(viewLog.views.length, before + 1, 'on repart d\'une vue neuve');
+  assert.strictEqual((await handlers['state:get'](e)).devoirs.error, '', 'l\'erreur est effacée à la réouverture');
+  await handlers['devoirs:closeEmbedded'](e);
 
   // Réglages sauvegardés
   const saved = JSON.parse(fs.readFileSync(path.join(tmp, 'userData', 'cartable.json'), 'utf8'));

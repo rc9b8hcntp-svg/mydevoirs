@@ -13,8 +13,16 @@ const sync = require('./sync');
 const { parseSchedule } = require('./schedule-import');
 const i18n = require('./src/i18n');
 
-// Dépôt GitHub des mises à jour : fixe, l'interface ne peut pas le changer
-const UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
+// Dépôt GitHub des mises à jour : fixe, l'interface ne peut pas le changer.
+// Un build GitHub Actions de Cartable OS le note dans update-repo.json (le dépôt qui publie l'installeur) ; sinon, l'ancien dépôt.
+function readUpdateRepo() {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(__dirname, 'update-repo.json'), 'utf8'));
+    if (j && typeof j.repo === 'string' && /^[\w.-]+\/[\w.-]+$/.test(j.repo)) return j.repo;
+  } catch (e) { /* pas de fichier : build habituel de Mes Devoirs */ }
+  return 'rc9b8hcntp-svg/mydevoirs';
+}
+const UPDATE_REPO = readUpdateRepo();
 
 // Langue de l'interface (aussi pour les notifications et les menus) : « fr » ou « en »
 let uiLang = 'fr';

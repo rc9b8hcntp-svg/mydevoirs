@@ -2,7 +2,7 @@
 
 // Pont entre l'interface de Mes Devoirs (affichée dans Cartable OS) et le programme principal de Cartable OS.
 // Il expose le même « devoirsAPI » que le preload de Mes Devoirs, pour que l'interface fonctionne sans aucun changement.
-// Les actions qui n'existent que dans le logiciel à part (mini-widget, notifications, mise à jour) répondent « indisponible ».
+// Les actions qui n'existent que dans le logiciel à part (mini-widget, notifications) répondent « indisponible ».
 
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -29,12 +29,14 @@ contextBridge.exposeInMainWorld('devoirsAPI', {
   // Les données ont changé en dehors de la vue (Mes Devoirs à part, synchro) : reçoit la nouvelle liste
   onDataChanged: (cb) => ipcRenderer.on('data:changed', (_e, payload) => cb(payload)),
 
+  // Mises à jour : celles de Cartable OS (un seul installeur met à jour les deux logiciels)
+  checkUpdate: (repo, tag) => call('update:check', repo, tag),
+  downloadUpdate: () => call('update:download'),
+  listReleases: (repo) => call('update:list', repo),
+  openUpdatePage: (url) => call('update:open', url),
+  onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
+
   // Réservé au logiciel Mes Devoirs à part
-  checkUpdate: async () => ({ status: 'error' }),
-  downloadUpdate: async () => ({ ok: false, reason: 'unavailable' }),
-  listReleases: async () => ({ status: 'error' }),
-  openUpdatePage: async () => false,
-  onUpdateProgress: none,
   testNotification: async () => ({ ok: false }),
   toggleWidget: async () => false,
   widgetState: async () => false,
