@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes Devoirs</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="logo"><span class="ico" data-icon="book"></span></span>
+        <h1>Mes Devoirs</h1>
+      </div>
+
+      <button class="primary big" id="newBtn" title="Nouveau devoir (Ctrl+N)"><span class="ico" data-icon="plus"></span>Nouveau devoir</button>
+
+      <nav class="filters" id="filters">
+        <button data-filter="today"><span class="ico" data-icon="sun"></span><span class="lbl">Aujourd'hui</span><span class="count" id="c-today">0</span></button>
+        <button data-filter="todo" class="active"><span class="ico" data-icon="circle"></span><span class="lbl">À faire</span><span class="count" id="c-todo">0</span></button>
+        <button data-filter="late"><span class="ico" data-icon="alert"></span><span class="lbl">En retard</span><span class="count" id="c-late">0</span></button>
+        <button data-filter="week"><span class="ico" data-icon="calendar"></span><span class="lbl">Cette semaine</span><span class="count" id="c-week">0</span></button>
+        <button data-filter="done"><span class="ico" data-icon="check"></span><span class="lbl">Terminés</span><span class="count" id="c-done">0</span></button>
+        <button data-filter="all"><span class="ico" data-icon="layers"></span><span class="lbl">Tous</span><span class="count" id="c-all">0</span></button>
+      </nav>
+
+      <div class="side-block">
+        <div class="side-head">
+          <h3>Matières</h3>
+          <button class="icon-btn tiny" id="manageSubjects" title="Gérer les matières" aria-label="Gérer les matières"><span class="ico" data-icon="edit"></span></button>
+        </div>
+        <div id="subjectList" class="subject-list"></div>
+      </div>
+
+      <div class="side-foot">
+        <button class="nav-btn" id="clearDone"><span class="ico" data-icon="trash"></span>Supprimer les terminés</button>
+        <button class="nav-btn" id="trashBtn"><span class="ico" data-icon="trash"></span><span class="lbl">Corbeille</span><span class="count" id="c-trash">0</span></button>
+        <button class="nav-btn" id="archiveBtn"><span class="ico" data-icon="archive"></span><span class="lbl">Archive</span><span class="count" id="c-archive">0</span></button>
+        <button class="nav-btn" id="widgetBtn"><span class="ico" data-icon="monitor"></span>Mini-widget</button>
+        <button class="nav-btn" id="helpBtn"><span class="ico" data-icon="keyboard"></span>Raccourcis clavier</button>
+        <button class="nav-btn" id="settingsBtn"><span class="ico" data-icon="settings"></span>Paramètres</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="page-head">
+        <div>
+          <h2 id="pageTitle">À faire</h2>
+          <p class="stats" id="stats"></p>
+        </div>
+        <div class="head-actions">
+          <div class="seg view" id="viewSeg" role="radiogroup" aria-label="Affichage">
+            <button data-view="list"><span class="ico" data-icon="list"></span>Liste</button>
+            <button data-view="calendar"><span class="ico" data-icon="calendar"></span>Calendrier</button>
+          </div>
+          <button class="icon-btn" id="statsBtn" title="Statistiques (Ctrl+I)" aria-label="Statistiques"><span class="ico" data-icon="chart"></span></button>
+          <button class="icon-btn" id="printBtn" title="Imprimer ou enregistrer en PDF (Ctrl+P)" aria-label="Imprimer"><span class="ico" data-icon="printer"></span></button>
+          <button class="icon-btn" id="themeBtn" title="Changer de thème (Ctrl+Maj+D)" aria-label="Changer de thème"><span class="ico" data-icon="moon"></span></button>
+        </div>
+      </header>
+
+      <section class="hero" id="hero" hidden></section>
+
+      <div class="quick-bar" id="quickBar">
+        <span class="ico" data-icon="plus"></span>
+        <input type="text" id="quickInput" maxlength="300" autocomplete="off" spellcheck="false" placeholder="Ajout rapide : Maths ex 5 p.12 pour vendredi" title="Tape une phrase : matière, jour, durée… (touche Q)" aria-label="Ajout rapide">
+        <div id="quickPreview" class="quick-preview" hidden></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <span class="ico" data-icon="search"></span>
+          <input type="search" id="search" title="Rechercher (Ctrl+F ou /)" placeholder="Rechercher un devoir…" autocomplete="off">
+        </div>
+        <select id="sort" aria-label="Trier">
+          <option value="date">Trier par date</option>
+          <option value="priority">Trier par priorité</option>
+          <option value="subject">Trier par matière</option>
+          <option value="created">Plus récents d'abord</option>
+          <option value="custom">Ordre personnalisé (glisser)</option>
+        </select>
+        <button type="button" class="ghost" id="selBtn" title="Sélection multiple">Sélectionner</button>
+      </div>
+      <div class="bulk" id="bulkBar" hidden>
+        <span id="bulkCount"></span>
+        <button type="button" class="ghost small" id="bulkAll">Tout</button>
+        <button type="button" class="ghost small" id="bulkDone">Terminer</button>
+        <button type="button" class="ghost small" id="bulkDel">Supprimer</button>
+        <button type="button" class="ghost small" id="bulkCancel">Fermer</button>
+      </div>
+
+      <section id="calendar" class="calendar" hidden>
+        <div class="cal-head">
+          <h3 id="calTitle">Novembre 2026</h3>
+          <div class="seg view" id="calModeSeg" role="radiogroup" aria-label="Période">
+            <button data-mode="month">Mois</button>
+            <button data-mode="week">Semaine</button>
+          </div>
+          <div class="cal-nav">
+            <button class="icon-btn" id="calPrev" title="Mois précédent" aria-label="Mois précédent"><span class="ico" data-icon="left"></span></button>
+            <button class="ghost small" id="calToday">Aujourd'hui</button>
+            <button class="icon-btn" id="calNext" title="Mois suivant" aria-label="Mois suivant"><span class="ico" data-icon="right"></span></button>
+          </div>
+          <span class="cal-note" id="calNote"></span>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </section>
+
+      <ul id="list" class="list"></ul>
+      <div id="empty" class="empty" hidden>
+        <div class="empty-emoji">🎉</div>
+        <p id="emptyText">Rien à afficher ici.</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Ajouter / modifier un devoir -->
+  <dialog id="dialog">
+    <form method="dialog" id="form" autocomplete="off">
+      <div class="dlg-head">
+        <h2 id="dialogTitle">Nouveau devoir</h2>
+        <button type="button" class="icon-btn tiny" id="dlgClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+      </div>
+
+      <div class="field" id="f-tpl-box">
+        <span class="flabel">Modèle</span>
+        <div id="f-templates" class="chips"></div>
+      </div>
+
+      <label class="field">
+        <span class="flabel">Titre</span>
+        <input type="text" id="f-title" required maxlength="120" placeholder="Ex : Exercices 3 à 7 page 142">
+      </label>
+
+      <div class="field">
+        <span class="flabel">Type</span>
+        <div class="seg" id="f-kind" role="radiogroup" aria-label="Type">
+          <button type="button" data-value="">Devoir</button>
+          <button type="button" data-value="controle">📝 Contrôle</button>
+          <button type="button" data-value="expose">🎤 Exposé</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Matière</span>
+        <div id="f-subjects" class="chips"></div>
+        <p class="hint" id="f-subject-hint" hidden></p>
+
+        <div id="quickAdd" class="quick" hidden>
+          <input type="text" id="qa-name" maxlength="30" placeholder="Nom de la nouvelle matière">
+          <div id="qa-palette" class="palette"></div>
+          <div class="quick-actions">
+            <span class="err" id="qa-err"></span>
+            <button type="button" class="ghost small" id="qa-cancel">Annuler</button>
+            <button type="button" class="primary small" id="qa-ok">Ajouter la matière</button>
+          </div>
+        </div>
+
+        <button type="button" class="link" id="manageFromDialog">Gérer les matières (retirer, changer la couleur…)</button>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="flabel">Pour le</span>
+          <input type="date" id="f-date">
+        </label>
+        <div class="field">
+          <span class="flabel">Priorité</span>
+          <div class="seg" id="f-priority" role="radiogroup" aria-label="Priorité">
+            <button type="button" data-value="1">Normale</button>
+            <button type="button" data-value="2">Importante</button>
+            <button type="button" data-value="3">Urgente</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field" id="f-grade-box" hidden>
+        <span class="flabel">Note obtenue</span>
+        <div class="grade-line">
+          <input type="number" id="f-grade" min="0" max="1000" step="0.25" inputmode="decimal" placeholder="—" aria-label="Note obtenue">
+          <span>/</span>
+          <input type="number" id="f-grade-max" min="1" max="1000" step="1" inputmode="decimal" placeholder="20" aria-label="Note maximale">
+          <label class="coef">Coef.<input type="number" id="f-coef" min="0" max="100" step="0.5" inputmode="decimal" placeholder="1" aria-label="Coefficient"></label>
+        </div>
+        <span class="hint">Laisse vide tant que tu n'as pas la note. Elle compte dans la moyenne de la matière (Statistiques).</span>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="flabel">Durée estimée</span>
+          <span class="unit-input"><input type="number" id="f-minutes" min="0" max="1440" step="5" inputmode="numeric" placeholder="0"><span>min</span></span>
+        </label>
+        <label class="field">
+          <span class="flabel">Répétition</span>
+          <select id="f-repeat" aria-describedby="f-repeat-hint">
+            <option value="">Aucune</option>
+            <option value="daily">Chaque jour</option>
+            <option value="weekly">Chaque semaine</option>
+            <option value="monthly">Chaque mois</option>
+          </select>
+          <span class="hint" id="f-repeat-hint">Choisis d'abord une date.</span>
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="flabel">Notes</span>
+        <textarea id="f-notes" rows="3" maxlength="1000" placeholder="Détails, pages, consignes… (les liens https:// sont cliquables)"></textarea>
+      </label>
+
+      <div class="field">
+        <span class="flabel">Sous-tâches</span>
+        <ul id="f-subs" class="subs-edit"></ul>
+        <div class="adder">
+          <input type="text" id="f-sub-input" maxlength="200" placeholder="Ajouter une étape (Entrée)">
+          <button type="button" class="ghost small" id="f-sub-add">Ajouter</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Étiquettes</span>
+        <div id="f-tags" class="chips"></div>
+        <input type="text" id="f-tag-input" list="tag-list" maxlength="30" placeholder="Ex : groupe, à rendre… (Entrée pour ajouter)">
+        <datalist id="tag-list"></datalist>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Fichiers joints</span>
+        <ul id="f-files" class="files-edit"></ul>
+        <button type="button" class="ghost small attach" id="f-file-add"><span class="ico" data-icon="paperclip"></span>Joindre un fichier</button>
+      </div>
+
+      <button type="button" class="link" id="f-tpl-save">Enregistrer comme modèle</button>
+
+      <div class="actions">
+        <button type="button" class="ghost" id="cancelBtn">Annuler</button>
+        <button type="submit" class="primary" id="saveBtn">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Détail d'un devoir (depuis le calendrier) : cocher + modifier -->
+  <dialog id="viewDialog" class="view">
+    <div class="dlg-head">
+      <h2>Devoir</h2>
+      <button type="button" class="icon-btn tiny" id="vClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div id="vBody" class="v-body"></div>
+    <div class="actions">
+      <button type="button" class="ghost" id="vCancel">Fermer</button>
+      <button type="button" class="ghost" id="vDup"><span class="ico" data-icon="copy"></span>Dupliquer</button>
+      <button type="button" class="primary" id="vEdit"><span class="ico" data-icon="edit"></span>Modifier</button>
+    </div>
+  </dialog>
+
+  <!-- Statistiques -->
+  <dialog id="statsDialog" class="view statsdlg">
+    <div class="dlg-head">
+      <h2>Statistiques</h2>
+      <button type="button" class="icon-btn tiny" id="stClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div id="statsBody" class="stats-body"></div>
+    <div class="actions"><button type="button" class="primary" id="stOk">OK</button></div>
+  </dialog>
+
+  <!-- Corbeille et archive -->
+  <dialog id="boxDialog" class="view boxdlg">
+    <div class="dlg-head">
+      <h2 id="boxTitle">Corbeille</h2>
+      <button type="button" class="icon-btn tiny" id="boxClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <p class="hint" id="boxHint"></p>
+    <input type="search" id="boxSearch" placeholder="Rechercher…" autocomplete="off" aria-label="Rechercher">
+    <ul id="boxList" class="box-list"></ul>
+    <div class="actions">
+      <button type="button" class="ghost" id="boxEmpty"><span class="ico" data-icon="trash"></span>Vider la corbeille</button>
+      <button type="button" class="primary" id="boxOk">Fermer</button>
+    </div>
+  </dialog>
+
+  <!-- Verrouillage par code -->
+  <dialog id="lockDialog" class="view lockdlg">
+    <div class="lock-ico">🔒</div>
+    <h2>Mes Devoirs est verrouillé</h2>
+    <form id="lockForm" autocomplete="off">
+      <input type="password" id="lockInput" placeholder="Code" maxlength="32" autocomplete="off" aria-label="Code">
+      <button type="submit" class="primary" id="lockOk">Déverrouiller</button>
+    </form>
+    <p class="err" id="lockErr"></p>
+    <button type="button" class="link" id="lockForgot">Code oublié ?</button>
+    <p class="hint" id="lockForgotText" hidden>Pour retrouver l'accès : ferme l'application, ouvre le fichier « devoirs.json » (dossier %APPDATA%\Mes Devoirs) avec le Bloc-notes et supprime le bloc « lock ». Tes devoirs sont conservés.</p>
+  </dialog>
+
+  <!-- Imprimer / PDF -->
+  <dialog id="printDialog" class="view">
+    <div class="dlg-head">
+      <h2>Imprimer ou enregistrer en PDF</h2>
+      <button type="button" class="icon-btn tiny" id="pClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div class="v-body print-opts">
+      <div class="field">
+        <span class="flabel">Période</span>
+        <div class="seg" id="p-range" role="radiogroup" aria-label="Période">
+          <button type="button" data-value="week">Cette semaine</button>
+          <button type="button" data-value="next">Semaine suivante</button>
+          <button type="button" data-value="todo">Tout ce qui reste</button>
+        </div>
+      </div>
+      <label class="check-line"><input type="checkbox" id="p-done"> Inclure les devoirs terminés</label>
+      <p class="hint" id="p-count"></p>
+    </div>
+    <div class="actions">
+      <button type="button" class="ghost" id="pCancel">Fermer</button>
+      <button type="button" class="ghost" id="pPdf"><span class="ico" data-icon="download"></span>Enregistrer en PDF</button>
+      <button type="button" class="primary" id="pPrint"><span class="ico" data-icon="printer"></span>Imprimer</button>
+    </div>
+  </dialog>
+
+  <!-- Aide : raccourcis clavier -->
+  <dialog id="helpDialog" class="view help">
+    <div class="dlg-head">
+      <h2>Raccourcis clavier</h2>
+      <button type="button" class="icon-btn tiny" id="hClose" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+    </div>
+    <div id="helpBody" class="help-body"></div>
+    <div class="actions"><button type="button" class="primary" id="hOk">OK</button></div>
+  </dialog>
+
+  <!-- Paramètres -->
+  <dialog id="settings" class="settings">
+    <div class="set-wrap">
+      <nav class="set-nav" id="setNav">
+        <h2>Paramètres</h2>
+        <button data-tab="appearance" class="active"><span class="ico" data-icon="palette"></span>Apparence</button>
+        <button data-tab="subjects"><span class="ico" data-icon="book"></span>Matières</button>
+        <button data-tab="schedule"><span class="ico" data-icon="clock"></span>Emploi du temps</button>
+        <button data-tab="homework"><span class="ico" data-icon="sliders"></span>Devoirs</button>
+        <button data-tab="notifications"><span class="ico" data-icon="bell"></span>Notifications</button>
+        <button data-tab="organize"><span class="ico" data-icon="layers"></span>Organisation</button>
+        <button data-tab="comfort"><span class="ico" data-icon="monitor"></span>Confort</button>
+        <button data-tab="backup"><span class="ico" data-icon="save"></span>Sauvegarde</button>
+        <button data-tab="update"><span class="ico" data-icon="download"></span>Mise à jour</button>
+      </nav>
+
+      <button class="icon-btn tiny set-close" id="setClose" aria-label="Fermer les paramètres"><span class="ico" data-icon="x"></span></button>
+
+      <div class="set-body">
+        <!-- Apparence -->
+        <section data-panel="appearance">
+          <h3 class="set-title">Apparence</h3>
+
+          <div class="group">
+            <div class="group-label">Thème</div>
+            <div class="seg wide" id="themeSeg" role="radiogroup" aria-label="Thème">
+              <button data-theme="light"><span class="ico" data-icon="sun"></span>Clair</button>
+              <button data-theme="dark"><span class="ico" data-icon="moon"></span>Sombre</button>
+              <button data-theme="auto"><span class="ico" data-icon="monitor"></span>Automatique</button>
+              <button data-theme="time"><span class="ico" data-icon="clock"></span>Selon l'heure</button>
+            </div>
+            <p class="hint">« Automatique » suit le thème de Windows. « Selon l'heure » : clair de 7 h à 19 h, sombre ensuite.</p>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Couleur principale</div>
+            <div id="accentList" class="palette"></div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Taille du texte</div>
+            <div class="seg wide" id="fontSeg" role="radiogroup" aria-label="Taille du texte">
+              <button data-scale="90">Petit</button>
+              <button data-scale="100">Normal</button>
+              <button data-scale="115">Grand</button>
+              <button data-scale="130">Très grand</button>
+            </div>
+          </div>
+
+          <div class="setting">
+            <div>
+              <div class="group-label">Mode compact</div>
+              <p class="hint">Liste plus serrée quand tu as beaucoup de devoirs.</p>
+            </div>
+            <input type="checkbox" class="switch" id="s-compact" aria-label="Mode compact">
+          </div>
+        </section>
+
+        <!-- Matières -->
+        <section data-panel="subjects" hidden>
+          <h3 class="set-title">Matières</h3>
+          <p class="hint top">Ces matières apparaissent quand tu ajoutes un devoir. Clique sur une pastille pour changer sa couleur.</p>
+
+          <div id="s-subjects" class="srows"></div>
+
+          <div class="group add-group">
+            <div class="group-label">Ajouter une matière</div>
+            <div class="add-line">
+              <input type="text" id="s-new-name" maxlength="30" placeholder="Ex : Latin, Informatique…" autocomplete="off">
+              <button class="primary" id="s-new-add"><span class="ico" data-icon="plus"></span>Ajouter</button>
+            </div>
+            <div id="s-new-palette" class="palette"></div>
+            <p class="err" id="s-new-err"></p>
+          </div>
+
+          <button class="ghost small" id="s-restore"><span class="ico" data-icon="rotate"></span>Remettre les matières par défaut</button>
+        </section>
+
+        <!-- Emploi du temps -->
+        <section data-panel="schedule" hidden>
+          <h3 class="set-title">Emploi du temps</h3>
+          <p class="hint top">Coche les jours où tu as cours dans chaque matière. En créant un devoir pour un jour donné, l'application te propose les matières de ce jour-là, et la page « Aujourd'hui » affiche tes cours.</p>
+          <div id="s-schedule" class="sched"></div>
+          <div class="setting">
+            <div class="desc">Importer un emploi du temps<small id="sched-msg">Depuis un fichier .csv, .txt, .ics (agenda) ou .json. Exemple : « Maths;lundi, mercredi » sur chaque ligne, ou un tableau avec une croix par jour.</small></div>
+            <button class="primary" id="sched-import"><span class="ico" data-icon="upload"></span>Importer…</button>
+          </div>
+        </section>
+
+        <!-- Devoirs -->
+        <section data-panel="homework" hidden>
+          <h3 class="set-title">Devoirs</h3>
+
+          <div class="setting">
+            <div class="desc">Page affichée au démarrage<small>La liste ouverte quand tu lances l'application.</small></div>
+            <select id="s-start" aria-label="Page affichée au démarrage">
+              <option value="today">Aujourd'hui</option>
+              <option value="todo">À faire</option>
+              <option value="late">En retard</option>
+              <option value="week">Cette semaine</option>
+              <option value="done">Terminés</option>
+              <option value="all">Tous</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Priorité par défaut<small>Utilisée pour chaque nouveau devoir.</small></div>
+            <select id="s-prio" aria-label="Priorité par défaut">
+              <option value="1">Normale</option>
+              <option value="2">Importante</option>
+              <option value="3">Urgente</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Confirmer avant de supprimer<small>Demande une confirmation avant de supprimer un devoir.</small></div>
+            <input type="checkbox" class="switch" id="s-confirm" aria-label="Confirmer avant de supprimer">
+          </div>
+        </section>
+
+        <!-- Notifications -->
+        <section data-panel="notifications" hidden>
+          <h3 class="set-title">Notifications</h3>
+
+          <div class="setting">
+            <div class="desc">Rappel quotidien<small>Une notification Windows avec les devoirs à rendre bientôt.</small></div>
+            <input type="checkbox" class="switch" id="n-enabled" aria-label="Activer le rappel quotidien">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Heure du rappel<small>Chaque jour à cette heure-là.</small></div>
+            <input type="time" id="n-time" aria-label="Heure du rappel">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Devoirs concernés<small>Jusqu'à quand regarder pour le rappel.</small></div>
+            <select id="n-days" aria-label="Devoirs concernés">
+              <option value="0">Ceux du jour</option>
+              <option value="1">Jusqu'à demain</option>
+              <option value="2">Dans les 2 jours</option>
+              <option value="3">Dans les 3 jours</option>
+              <option value="7">Dans la semaine</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Inclure les devoirs en retard<small>Ils sont ajoutés au rappel tant qu'ils ne sont pas terminés.</small></div>
+            <input type="checkbox" class="switch" id="n-late" aria-label="Inclure les devoirs en retard">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Un rappel par devoir<small>Une notification pour chaque devoir à rendre demain (la veille de l'échéance).</small></div>
+            <input type="checkbox" class="switch" id="n-due" aria-label="Activer un rappel par devoir">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Heure du rappel par devoir<small>Par exemple la veille à 18h.</small></div>
+            <input type="time" id="n-due-time" aria-label="Heure du rappel par devoir">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Rappel du matin<small>Une notification « tes devoirs du jour ».</small></div>
+            <input type="checkbox" class="switch" id="n-morning" aria-label="Activer le rappel du matin">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Heure du rappel du matin<small>Chaque jour à cette heure-là.</small></div>
+            <input type="time" id="n-morning-time" aria-label="Heure du rappel du matin">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Boutons dans la notification<small>« Marquer fait » et « Rappeler demain » directement depuis la notification d'un devoir, sans ouvrir l'appli.</small></div>
+            <input type="checkbox" class="switch" id="n-actions" aria-label="Boutons dans la notification">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Son de notification<small>Choisis un son, ou rends les notifications silencieuses.</small></div>
+            <select id="n-sound" aria-label="Son de notification">
+              <option value="default">Son par défaut</option>
+              <option value="reminder">Rappel</option>
+              <option value="im">Message</option>
+              <option value="mail">Courrier</option>
+              <option value="sms">SMS</option>
+              <option value="silent">Silencieux</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Mode vacances<small>Coupe tous les rappels entre deux dates.</small></div>
+            <input type="checkbox" class="switch" id="n-vac" aria-label="Activer le mode vacances">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Début des vacances<small>Premier jour sans rappel.</small></div>
+            <input type="date" id="n-vac-from" aria-label="Début des vacances">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Fin des vacances<small id="n-vac-msg">Dernier jour sans rappel.</small></div>
+            <input type="date" id="n-vac-to" aria-label="Fin des vacances">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Rester actif en arrière-plan<small>Fermer la fenêtre garde l'application dans la zone de notification, pour que les rappels arrivent quand même. Clic droit sur son icône pour la quitter.</small></div>
+            <input type="checkbox" class="switch" id="n-bg" aria-label="Rester actif en arrière-plan">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Lancer au démarrage de Windows<small>L'application démarre discrètement dans la zone de notification.</small></div>
+            <input type="checkbox" class="switch" id="n-startup" aria-label="Lancer au démarrage de Windows">
+          </div>
+
+          <div class="setting">
+            <div class="desc">Tester<small id="n-test-msg">Envoie une notification pour vérifier que tout marche.</small></div>
+            <button class="primary" id="n-test"><span class="ico" data-icon="bell"></span>Tester</button>
+          </div>
+        </section>
+
+        <!-- Organisation -->
+        <section data-panel="organize" hidden>
+          <h3 class="set-title">Organisation</h3>
+
+          <div class="group">
+            <div class="group-label">Modèles de devoirs</div>
+            <p class="hint top">Un modèle remplit le formulaire en un clic (titre, durée, étapes…). Pour en créer un : « Enregistrer comme modèle » dans « Nouveau devoir ».</p>
+            <div id="o-templates" class="srows"></div>
+            <button class="ghost small" id="o-tpl-restore"><span class="ico" data-icon="rotate"></span>Remettre les modèles par défaut</button>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Archiver automatiquement<small>Les devoirs terminés depuis longtemps quittent la liste (ils restent dans les statistiques et dans « Archive »).</small></div>
+            <select id="o-archive" aria-label="Archiver automatiquement">
+              <option value="0">Jamais</option>
+              <option value="3">Après 3 mois</option>
+              <option value="6">Après 6 mois</option>
+              <option value="12">Après 1 an</option>
+              <option value="24">Après 2 ans</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Archive<small id="o-archive-msg">Les devoirs archivés.</small></div>
+            <div class="btn-row">
+              <button class="ghost" id="o-archive-now">Archiver maintenant</button>
+              <button class="primary" id="o-archive-open">Ouvrir</button>
+            </div>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Corbeille<small>Un devoir supprimé reste récupérable pendant 30 jours.</small></div>
+            <button class="primary" id="o-trash-open">Ouvrir</button>
+          </div>
+        </section>
+
+        <!-- Confort -->
+        <section data-panel="comfort" hidden>
+          <h3 class="set-title">Confort</h3>
+
+          <div class="group">
+            <div class="group-label">Langue</div>
+            <div class="seg wide" id="langSeg" role="radiogroup" aria-label="Langue">
+              <button data-lang="fr">Français</button>
+              <button data-lang="en">English</button>
+            </div>
+            <p class="hint">L'application se recharge pour changer de langue.</p>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Mini-widget</div>
+            <div class="setting">
+              <div class="desc">Afficher le mini-widget<small>Une petite fenêtre toujours visible avec les devoirs en retard, d'aujourd'hui et de demain.</small></div>
+              <input type="checkbox" class="switch" id="w-open" aria-label="Afficher le mini-widget">
+            </div>
+            <div class="setting">
+              <div class="desc">L'ouvrir au démarrage<small>Le widget s'affiche dès que l'application se lance.</small></div>
+              <input type="checkbox" class="switch" id="w-auto" aria-label="Ouvrir le mini-widget au démarrage">
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Code de verrouillage</div>
+            <div class="setting">
+              <div class="desc">Code d'accès<small id="lock-state">Aucun code. Demande un code pour ouvrir l'application.</small></div>
+              <div class="btn-row">
+                <button class="primary" id="lock-set">Définir un code</button>
+                <button class="ghost" id="lock-remove" hidden>Retirer</button>
+              </div>
+            </div>
+            <div id="lock-form" class="lock-form" hidden>
+              <input type="password" id="lk-current" placeholder="Code actuel" maxlength="32" autocomplete="off" aria-label="Code actuel">
+              <input type="password" id="lk-new" placeholder="Nouveau code (4 caractères ou plus)" maxlength="32" autocomplete="off" aria-label="Nouveau code">
+              <input type="password" id="lk-confirm" placeholder="Répète le nouveau code" maxlength="32" autocomplete="off" aria-label="Répéter le nouveau code">
+              <div class="add-line">
+                <button class="primary" id="lk-save">Enregistrer</button>
+                <button class="ghost" id="lk-cancel">Annuler</button>
+              </div>
+            </div>
+            <p class="err" id="lk-err"></p>
+            <div class="setting">
+              <div class="desc">Verrouiller après inactivité<small>Redemande le code quand tu n'utilises plus l'application.</small></div>
+              <select id="lk-after" aria-label="Verrouiller après inactivité">
+                <option value="0">Jamais</option>
+                <option value="1">1 minute</option>
+                <option value="5">5 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+              </select>
+            </div>
+            <p class="hint">Le code empêche d'ouvrir l'application (Ctrl+L pour la verrouiller tout de suite) et cache les devoirs dans le widget. Il ne chiffre pas le fichier de données, et les notifications peuvent montrer le titre des devoirs.</p>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Synchronisation entre ordinateurs</div>
+            <p class="hint top">Choisis un dossier partagé (OneDrive, Google Drive, clé USB…) sur chaque ordinateur : les devoirs, la corbeille, l'archive, les matières et les modèles sont fusionnés automatiquement. Retirer une matière n'est pas synchronisé.</p>
+            <div class="setting">
+              <div class="desc">Dossier de synchronisation<small id="sync-status">Désactivée.</small></div>
+              <div class="btn-row">
+                <button class="primary" id="sync-pick">Choisir un dossier…</button>
+                <button class="ghost" id="sync-now" hidden>Synchroniser</button>
+                <button class="ghost" id="sync-off" hidden>Arrêter</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Sauvegarde -->
+        <section data-panel="backup" hidden>
+          <h3 class="set-title">Sauvegarde</h3>
+          <p class="hint top">Exporte tes données dans un fichier pour les garder en sécurité ou les retrouver sur un autre ordinateur, puis réimporte-le quand tu veux.</p>
+
+          <div class="group">
+            <div class="group-label">Exporter</div>
+            <div class="setting">
+              <div class="desc">Devoirs<small>Tous tes devoirs, terminés ou non.</small></div>
+              <input type="checkbox" class="switch" id="bx-homework" checked aria-label="Exporter les devoirs">
+            </div>
+            <div class="setting">
+              <div class="desc">Matières<small>La liste de tes matières et leurs couleurs.</small></div>
+              <input type="checkbox" class="switch" id="bx-subjects" checked aria-label="Exporter les matières">
+            </div>
+            <div class="setting">
+              <div class="desc">Réglages<small>Apparence, préférences et notifications.</small></div>
+              <input type="checkbox" class="switch" id="bx-settings" checked aria-label="Exporter les réglages">
+            </div>
+            <div class="setting">
+              <div class="desc">Créer le fichier<small id="bx-msg">Tu choisis où l'enregistrer.</small></div>
+              <button class="primary" id="bx-go"><span class="ico" data-icon="download"></span>Exporter</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Importer</div>
+            <div class="setting" id="bi-pick-row">
+              <div class="desc">Choisir un fichier<small id="bi-msg">Une sauvegarde créée par Mes Devoirs.</small></div>
+              <button class="primary" id="bi-pick"><span class="ico" data-icon="upload"></span>Importer…</button>
+            </div>
+
+            <div id="bi-box" hidden>
+              <div class="u-status new">
+                <span class="ico" data-icon="save"></span>
+                <div class="u-text">
+                  <strong id="bi-title"></strong>
+                  <span id="bi-sub"></span>
+                </div>
+              </div>
+
+              <div class="setting" id="bi-row-homework">
+                <div class="desc">Devoirs<small id="bi-n-homework"></small></div>
+                <input type="checkbox" class="switch" id="bi-homework" aria-label="Importer les devoirs">
+              </div>
+              <div class="setting" id="bi-row-subjects">
+                <div class="desc">Matières<small id="bi-n-subjects"></small></div>
+                <input type="checkbox" class="switch" id="bi-subjects" aria-label="Importer les matières">
+              </div>
+              <div class="setting" id="bi-row-settings">
+                <div class="desc">Réglages<small>Remplacent tes réglages actuels (thème, notifications…).</small></div>
+                <input type="checkbox" class="switch" id="bi-settings" aria-label="Importer les réglages">
+              </div>
+
+              <div class="group bi-mode-group">
+                <div class="group-label">Que faire des devoirs et matières actuels ?</div>
+                <div class="seg wide" id="bi-mode" role="radiogroup" aria-label="Mode d'import">
+                  <button data-mode="merge" class="on">Fusionner</button>
+                  <button data-mode="replace">Tout remplacer</button>
+                </div>
+                <p class="hint" id="bi-mode-hint"></p>
+              </div>
+
+              <div class="add-line">
+                <button class="primary" id="bi-apply"><span class="ico" data-icon="check"></span>Importer</button>
+                <button class="ghost" id="bi-cancel">Annuler</button>
+              </div>
+            </div>
+            <p class="err" id="bi-err"></p>
+          </div>
+        </section>
+
+        <!-- Mise à jour -->
+        <section data-panel="update" hidden>
+          <h3 class="set-title">Mise à jour</h3>
+
+          <div class="setting">
+            <div class="desc">Version installée<small id="u-version">…</small></div>
+            <button class="primary" id="u-check"><span class="ico" data-icon="rotate"></span>Rechercher une mise à jour</button>
+          </div>
+
+          <div class="setting">
+            <div class="desc">Version à rechercher<small>« Dernière version » suit les nouveautés. Choisis un tag pour viser une version précise (ou revenir en arrière).</small></div>
+            <select id="u-tag" aria-label="Version à rechercher"><option value="">Dernière version</option></select>
+          </div>
+
+          <div id="u-status" class="u-status" hidden>
+            <span class="ico" id="u-icon"></span>
+            <div class="u-text">
+              <strong id="u-title"></strong>
+              <span id="u-sub"></span>
+              <progress id="u-progress" max="100" value="0" hidden></progress>
+            </div>
+            <button class="primary small" id="u-open" hidden>Télécharger</button>
+          </div>
+
+          <div id="u-notes" class="u-notes" hidden>
+            <h4 id="u-notes-title"></h4>
+            <div id="u-notes-body"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Message bref avec bouton « Annuler » -->
+  <div id="toast" class="toast" popover="manual" role="status" aria-live="polite">
+    <span id="toast-text"></span>
+    <button type="button" id="toast-btn" class="toast-btn" hidden></button>
+  </div>
+  <!-- Feuille mise en page uniquement pour l'impression -->
+  <div id="printSheet" class="print-sheet" aria-hidden="true"></div>
+  <script src="i18n.js"></script>
+  <script src="quickadd.js"></script>
+  <script src="renderer.js"></script>
+  <script src="dashboard.js"></script>
+  <script src="extras.js"></script>
+</body>
+</html>

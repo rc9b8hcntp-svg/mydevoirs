@@ -1,0 +1,51 @@
+{
+  "name": "mes-devoirs",
+  "productName": "Mes Devoirs",
+  "version": "1.0.0",
+  "description": "Un logiciel simple pour noter ses devoirs",
+  "main": "main.js",
+  "author": "Maxence",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 --ia32 --arm64"
+  },
+  "build": {
+    "appId": "fr.maxence.mesdevoirs",
+    "productName": "Mes Devoirs",
+    "copyright": "Maxence",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "updater.js",
+      "notifier.js",
+      "backup.js",
+      "downloader.js",
+      "sync.js",
+      "schedule-import.js",
+      "widget-preload.js",
+      "src/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": "msi"
+    },
+    "msi": {
+      "artifactName": "MesDevoirs-${version}-${arch}.${ext}",
+      "oneClick": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mes Devoirs",
+      "runAfterFinish": true,
+      "warningsAsErrors": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

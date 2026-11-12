@@ -1,18 +1,20 @@
 {
-  "name": "mes-devoirs",
-  "productName": "Mes Devoirs",
+  "name": "cartable-os",
+  "productName": "Cartable OS",
   "version": "1.0.0",
-  "description": "Un logiciel simple pour noter ses devoirs",
+  "description": "Un OS pour le collège : écran d'accueil avec Word, Excel, PowerPoint, l'explorateur de fichiers, Mes Devoirs (à part ou intégré), et un emploi du temps (.ics) qui ouvre les dossiers des matières",
   "main": "main.js",
   "author": "Maxence",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --x64 --ia32 --arm64"
+    "test": "node tests/run.js",
+    "prepare-devoirs": "node scripts/prepare-devoirs.js",
+    "dist": "node scripts/prepare-devoirs.js && electron-builder --win msi --x64 --publish never"
   },
   "build": {
-    "appId": "fr.maxence.mesdevoirs",
-    "productName": "Mes Devoirs",
+    "appId": "fr.maxence.cartableos",
+    "productName": "Cartable OS",
     "copyright": "Maxence",
     "directories": {
       "output": "dist"
@@ -20,26 +22,36 @@
     "files": [
       "main.js",
       "preload.js",
-      "updater.js",
-      "notifier.js",
-      "backup.js",
-      "downloader.js",
-      "sync.js",
-      "schedule-import.js",
-      "widget-preload.js",
+      "ics.js",
+      "scheduler.js",
+      "apps.js",
+      "devoirs-link.js",
+      "devoirs-embed.js",
+      "devoirs-embed-preload.js",
       "src/**/*",
+      "mes-devoirs/backup.js",
+      "mes-devoirs/notifier.js",
+      "mes-devoirs/sync.js",
+      "mes-devoirs/schedule-import.js",
+      "mes-devoirs/src/**/*",
       "build/icon.png"
+    ],
+    "extraFiles": [
+      {
+        "from": "build/mes-devoirs-unpacked",
+        "to": "Mes Devoirs"
+      }
     ],
     "win": {
       "icon": "build/icon.png",
       "target": "msi"
     },
     "msi": {
-      "artifactName": "MesDevoirs-${version}-${arch}.${ext}",
+      "artifactName": "CartableOS-${version}-${arch}.${ext}",
       "oneClick": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mes Devoirs",
+      "shortcutName": "Cartable OS",
       "runAfterFinish": true,
       "warningsAsErrors": false
     }

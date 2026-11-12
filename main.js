@@ -1,800 +1,598 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, Notification, Tray, nativeImage, dialog, screen } = require('electron');
+'use strict';
+
+const { app, BrowserWindow, WebContentsView, ipcMain, Menu, Tray, nativeImage, dialog, shell, session, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
-const { checkForUpdate, listReleases } = require('./updater');
-const { downloadFile } = require('./downloader');
-const {
-  normalizeSettings, buildDigest, isDue, ymd, isPaused, isDueAt, buildMorning, buildReminder,
-  dueTomorrow, actionUrl, parseActionUrl, buildToastXml, daysUntil,
-} = require('./notifier');
-const backup = require('./backup');
-const sync = require('./sync');
-const { parseSchedule } = require('./schedule-import');
-const i18n = require('./src/i18n');
+const { spawn } = require('child_process');
+const { parseIcs, expand, subjectOf } = require('./ics');
+const { computeStatus, watchWindow } = require('./scheduler');
+const appsLib = require('./apps');
+const devoirs = require('./devoirs-link');
+const devoirsEmbed = require('./devoirs-embed');
 
-// Dépôt GitHub des mises à jour : fixe, l'interface ne peut pas le changer
-const UPDATE_REPO = 'rc9b8hcntp-svg/mydevoirs';
-
-// Langue de l'interface (aussi pour les notifications et les menus) : « fr » ou « en »
-let uiLang = 'fr';
-const T = (text) => i18n.tr(text, uiLang);
-
-// Nécessaire pour que Windows affiche correctement les notifications de l'appli
-app.setAppUserModelId('fr.maxence.mesdevoirs');
+app.setAppUserModelId('fr.maxence.cartableos');
 
 const ICON_PATH = path.join(__dirname, 'build', 'icon.png');
-const dataFile = () => path.join(app.getPath('userData'), 'devoirs.json');
-const notifStateFile = () => path.join(app.getPath('userData'), 'notifications-state.json');
+const TICK_MS = 10 * 1000;
+const MAX_ICS_BYTES = 5 * 1024 * 1024;
+const DAY_MS = 86400000;
 
-let mainWindow = null;
-let tray = null;
-let isQuitting = false;
-let lastAsset = null;   // installeur (.msi) correspondant à ce PC, trouvé par la dernière recherche de mise à jour
-let downloading = false;
-const ASSET_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[^/\s]+\/[\w.+-]+\.msi$/i;
-const liveNotifications = new Set(); // évite que Windows/Electron les « oublie » avant le clic
+// ---------- Réglages ----------
+const configFile = () => path.join(app.getPath('userData'), 'cartable.json');
+const icsFile = () => path.join(app.getPath('userData'), 'emploi-du-temps.ics');
 
-// ---------- Données ----------
-function readData() {
+let config = {
+  settings: { lockDuringSession: true, openAtLogin: true, rootFolder: '', subjectFolders: {}, apps: [] },
+  state: { triggered: {}, shortcutsVersion: '' },
+};
+
+const bool = (v, d) => (typeof v === 'boolean' ? v : d);
+const absDir = (v) => (typeof v === 'string' && path.isAbsolute(v) && v.length < 1000 ? v : '');
+
+function loadConfig() {
   try {
-    const raw = fs.readFileSync(dataFile(), 'utf8');
-    const parsed = JSON.parse(raw);
-    const data = {
-      homework: Array.isArray(parsed.homework) ? parsed.homework : [],
-      trash: Array.isArray(parsed.trash) ? parsed.trash : [],
-      archive: Array.isArray(parsed.archive) ? parsed.archive : [],
-      settings: parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {},
+    const raw = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
+    const s = raw.settings || {};
+    const folders = {};
+    if (s.subjectFolders && typeof s.subjectFolders === 'object') {
+      Object.keys(s.subjectFolders).slice(0, 200).forEach((k) => { const d = absDir(s.subjectFolders[k]); if (d) folders[k] = d; });
+    }
+    const trig = {};
+    const t = raw.state && raw.state.triggered && typeof raw.state.triggered === 'object' ? raw.state.triggered : {};
+    Object.keys(t).slice(0, 500).forEach((k) => { if (Number.isFinite(t[k])) trig[k] = t[k]; });
+    config = {
+      settings: {
+        lockDuringSession: bool(s.lockDuringSession, true),
+        openAtLogin: bool(s.openAtLogin, true),
+        rootFolder: absDir(s.rootFolder),
+        subjectFolders: folders,
+        apps: Array.isArray(s.apps) ? s.apps : [],
+      },
+      state: { triggered: trig, shortcutsVersion: raw.state && typeof raw.state.shortcutsVersion === 'string' ? raw.state.shortcutsVersion : '' },
     };
-    uiLang = data.settings.language === 'en' ? 'en' : 'fr';
-    return data;
-  } catch (e) {
-    return { homework: [], trash: [], archive: [], settings: {} };
-  }
+  } catch (e) { /* premier lancement : réglages par défaut */ }
 }
 
-function writeJson(file, data) {
-  const tmp = file + '.tmp';
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tmp, file);
-}
-
-function writeData(data) {
-  writeJson(dataFile(), {
-    homework: Array.isArray(data.homework) ? data.homework : [],
-    trash: Array.isArray(data.trash) ? data.trash : [],
-    archive: Array.isArray(data.archive) ? data.archive : [],
-    settings: data.settings && typeof data.settings === 'object' ? data.settings : {},
-  });
-  uiLang = data.settings && data.settings.language === 'en' ? 'en' : 'fr';
-}
-
-// État interne des notifications (dernier rappel envoyé…), séparé des données de l'utilisateur
-function readNotifState() {
+function saveConfig() {
   try {
-    const s = JSON.parse(fs.readFileSync(notifStateFile(), 'utf8'));
-    return s && typeof s === 'object' ? s : {};
-  } catch (e) {
-    return {};
+    const file = configFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch (e) { /* disque plein ou protégé : on garde les réglages en mémoire */ }
+}
+
+// ---------- Dossiers des matières ----------
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+function safeFolderName(name) {
+  let n = String(name || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
+  if (!n) n = 'Matière';
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(n)) n = `_${n}`;
+  return n.slice(0, 60);
+}
+
+const rootFolder = () => config.settings.rootFolder || path.join(app.getPath('documents'), 'Cartable OS');
+const subjectFolder = (name) => config.settings.subjectFolders[norm(name)] || path.join(rootFolder(), safeFolderName(name));
+
+function ensureDir(dir) {
+  try { fs.mkdirSync(dir, { recursive: true }); return true; } catch (e) { return false; }
+}
+
+async function openFolder(dir) {
+  if (!ensureDir(dir)) return false;
+  return (await shell.openPath(dir)) === '';
+}
+
+// ---------- Emploi du temps ----------
+let events = [];       // événements lus dans le fichier .ics
+let occurrences = [];  // cours des prochains jours
+let occDay = 0;
+let status = computeStatus([], Date.now());
+
+function loadSchedule() {
+  try {
+    events = parseIcs(fs.readFileSync(icsFile(), 'utf8'));
+  } catch (e) { events = []; }
+  occDay = 0;
+}
+
+function subjects() {
+  const seen = new Map();
+  events.forEach((e) => {
+    const n = subjectOf(e.summary);
+    if (n && !seen.has(norm(n))) seen.set(norm(n), n);
+  });
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+function refreshOccurrences(now) {
+  const day = new Date(now).setHours(0, 0, 0, 0);
+  if (day === occDay) return;
+  const w = watchWindow(now);
+  occurrences = expand(events, w.fromMs, w.toMs);
+  occDay = day;
+}
+
+// ---------- Mes Devoirs ----------
+let hwCache = { mtime: -1, list: null };
+function homework() {
+  const file = devoirs.dataFile(app.getPath('appData'));
+  let mtime = 0;
+  try { mtime = fs.statSync(file).mtimeMs; } catch (e) { mtime = -2; }
+  if (mtime !== hwCache.mtime) hwCache = { mtime, list: devoirs.readHomework(file) };
+  return hwCache.list;
+}
+
+const devoirsInstalled = () => (app.isPackaged ? fs.existsSync(devoirs.exePath(process.execPath)) : true);
+
+async function openDevoirs() {
+  if (!app.isPackaged) {
+    // Pendant le développement (npm start) : on lance le dossier mes-devoirs avec Electron
+    try {
+      const c = spawn(process.execPath, [path.join(__dirname, 'mes-devoirs')], { detached: true, stdio: 'ignore' });
+      c.on('error', () => {});
+      c.unref();
+      return { ok: true };
+    } catch (e) { return { ok: false, reason: 'not-installed' }; }
   }
+  const exe = devoirs.exePath(process.execPath);
+  if (!fs.existsSync(exe)) return { ok: false, reason: 'not-installed' };
+  const err = await shell.openPath(exe);
+  return err ? { ok: false, reason: 'launch' } : { ok: true };
 }
 
-function writeNotifState(state) {
-  try { writeJson(notifStateFile(), state); } catch (e) { /* pas grave */ }
+// L'installeur (.msi) copie Mes Devoirs à côté de Cartable OS ; ses raccourcis (menu Démarrer et Bureau) sont créés ici,
+// juste après l'installation, avec le même identifiant Windows que Mes Devoirs pour que ses notifications fonctionnent.
+function ensureDevoirsShortcuts() {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  if (config.state.shortcutsVersion === app.getVersion()) return;
+  const exe = devoirs.exePath(process.execPath);
+  if (!fs.existsSync(exe)) return;
+  const opts = { target: exe, cwd: path.dirname(exe), description: 'Mes Devoirs', icon: exe, iconIndex: 0, appUserModelId: devoirs.AUMID };
+  try {
+    const menu = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+    ensureDir(menu);
+    if (!shell.writeShortcutLink(path.join(menu, 'Mes Devoirs.lnk'), 'replace', opts)) return;
+    shell.writeShortcutLink(path.join(app.getPath('desktop'), 'Mes Devoirs.lnk'), 'replace', opts);
+    config.state.shortcutsVersion = app.getVersion();
+    saveConfig();
+  } catch (e) { /* on réessaiera au prochain lancement */ }
 }
 
-function notifSettings() {
-  return normalizeSettings(readData().settings.notifications);
+// ---------- Mes Devoirs intégré (dans la fenêtre de Cartable OS) ----------
+// Le même logiciel que Mes Devoirs, mais son interface s'affiche directement sous la barre de Cartable OS, dans une vue
+// de la fenêtre. Mêmes données que le logiciel à part (voir devoirs-embed.js).
+const BAR_HEIGHT = 52; // hauteur de la barre du haut (.bar dans os.css) : la vue s'affiche en dessous
+const DEVOIRS_UI = path.join(__dirname, 'mes-devoirs', 'src', 'index.html');
+let dvView = null;
+let dvShown = false;
+
+const embedBridge = devoirsEmbed.createEmbed({
+  ipcMain, dialog, shell, app,
+  dataFile: () => devoirs.dataFile(app.getPath('appData')),
+  isEmbedSender: (e) => !!dvView && !dvView.webContents.isDestroyed() && e.sender === dvView.webContents,
+  parentWindow: () => (win && !win.isDestroyed() ? win : undefined),
+  sendToView: (channel, payload) => { if (dvView && !dvView.webContents.isDestroyed()) dvView.webContents.send(channel, payload); },
+  onSaved: () => { if (dvShown) pushState(false); },
+});
+embedBridge.register();
+
+const devoirsEmbedAvailable = () => fs.existsSync(DEVOIRS_UI);
+
+function layoutDevoirsView() {
+  if (!dvView || !win || win.isDestroyed()) return;
+  const [w, h] = win.getContentSize();
+  dvView.setBounds({ x: 0, y: BAR_HEIGHT, width: Math.max(w, 0), height: Math.max(h - BAR_HEIGHT, 0) });
+}
+
+function ensureDevoirsView() {
+  if (dvView && !dvView.webContents.isDestroyed()) return dvView;
+  dvView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'devoirs-embed-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+    },
+  });
+  if (dvView.setBackgroundColor) dvView.setBackgroundColor('#f5f6fa');
+  const wc = dvView.webContents;
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  wc.on('will-navigate', (e) => e.preventDefault());
+  // Ce qui appartient au logiciel à part (mini-widget, notifications Windows, mise à jour) est masqué dans la vue intégrée
+  wc.on('dom-ready', () => { wc.insertCSS(devoirsEmbed.HIDE_CSS).catch(() => {}); });
+  win.contentView.addChildView(dvView);
+  wc.loadFile(DEVOIRS_UI);
+  return dvView;
+}
+
+function openDevoirsEmbedded() {
+  if (!devoirsEmbedAvailable()) return { ok: false, reason: 'missing' };
+  if (!win || win.isDestroyed()) return { ok: false, reason: 'launch' };
+  const first = !dvView;
+  const view = ensureDevoirsView();
+  view.setVisible(true);
+  layoutDevoirsView();
+  if (first || !dvShown) embedBridge.startWatch();
+  dvShown = true;
+  view.webContents.focus();
+  pushState(true);
+  return { ok: true };
+}
+
+// « Accueil » : on range la vue (sans la détruire, pour retrouver Mes Devoirs tel quel) et on arrête de surveiller le fichier
+function closeDevoirsEmbedded() {
+  if (!dvShown) return { ok: true };
+  dvShown = false;
+  embedBridge.stopWatch();
+  if (dvView && !dvView.webContents.isDestroyed()) dvView.setVisible(false);
+  if (win && !win.isDestroyed()) win.webContents.focus();
+  pushState(true);
+  return { ok: true };
+}
+
+function destroyDevoirsView() {
+  embedBridge.stopWatch();
+  dvShown = false;
+  if (dvView) {
+    try { if (win && !win.isDestroyed()) win.contentView.removeChildView(dvView); } catch (e) { /* déjà retirée */ }
+    try { if (!dvView.webContents.isDestroyed()) dvView.webContents.close(); } catch (e) { /* déjà fermée */ }
+    dvView = null;
+  }
 }
 
 // ---------- Fenêtre ----------
-function createWindow(startHidden) {
-  const win = new BrowserWindow({
-    width: 980,
-    height: 700,
-    minWidth: 420,
-    minHeight: 420,
-    title: 'Mes Devoirs',
-    backgroundColor: '#f5f6fa',
+let win = null;
+let tray = null;
+let quitting = false;
+let sessionActive = false;
+let showWhenReady = false;
+
+const lockedNow = () => sessionActive && config.settings.lockDuringSession;
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 980,
+    minHeight: 620,
+    frame: false,
+    show: false,
+    backgroundColor: '#0b0f1f',
     icon: ICON_PATH,
-    show: !startHidden,
+    title: 'Cartable OS',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      spellcheck: false,
     },
-  });
-  win.loadFile(path.join(__dirname, 'src', 'index.html'));
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  win.webContents.on('will-navigate', (e) => e.preventDefault());
-
-  // Fermer la fenêtre avec l'option « rester en arrière-plan » : on laisse la fenêtre se fermer vraiment
-  // (l'appli reste active dans la zone de notification). Ainsi, quand on la rouvre, c'est une nouvelle
-  // fenêtre et Windows rejoue sa vraie animation d'ouverture (ce que ne fait pas un simple hide/show).
-  win.on('close', () => {
-    if (isQuitting || !notifSettings().background) return;
-    showTrayHintOnce();
-  });
-  win.on('session-end', () => { isQuitting = true; }); // arrêt / déconnexion de Windows
-  win.on('closed', () => { mainWindow = null; });
-  mainWindow = win;
-  return win;
-}
-
-function showWindow() {
-  if (!mainWindow) createWindow(false);
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
-  return mainWindow;
-}
-
-// ---------- Zone de notification (tray) ----------
-function ensureTray() {
-  if (tray) return;
-  const img = nativeImage.createFromPath(ICON_PATH).resize({ width: 16, height: 16 });
-  tray = new Tray(img);
-  tray.setToolTip('Mes Devoirs');
-  refreshTrayMenu();
-  tray.on('click', showWindow);
-}
-
-function refreshTrayMenu() {
-  if (!tray) return;
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: T('Ouvrir Mes Devoirs'), click: showWindow },
-    { label: T('Mini-widget'), click: () => toggleWidget() },
-    { type: 'separator' },
-    { label: T('Quitter'), click: () => { isQuitting = true; app.quit(); } },
-  ]));
-}
-
-function destroyTray() {
-  if (tray) { tray.destroy(); tray = null; }
-}
-
-// Applique les réglages qui touchent le système (icône dans la zone de notification, démarrage de Windows)
-function applySystemSettings(settings) {
-  const n = normalizeSettings(settings && settings.notifications);
-  if (n.background) ensureTray(); else destroyTray();
-  if (app.isPackaged) {
-    try {
-      app.setLoginItemSettings({ openAtLogin: n.startup, args: n.background ? ['--hidden'] : [] });
-    } catch (e) { /* ignoré */ }
-  }
-}
-
-// ---------- Notifications ----------
-function notify({ title, body, filter, homeworkId }) {
-  if (!Notification.isSupported()) return false;
-  const s = notifSettings();
-  title = T(title);
-  body = T(body);
-  const opts = { title, body, icon: ICON_PATH, silent: s.sound === 'silent' };
-  if (process.platform === 'win32') {
-    // 12 : boutons dans la notification (ils relancent l'appli en douce via mesdevoirs://…, sans ouvrir la fenêtre)
-    // 15 : son au choix ou silence
-    const actions = s.actions && homeworkId
-      ? [
-        { label: T('Marquer fait'), url: actionUrl('done', homeworkId) },
-        { label: T('Rappeler demain'), url: actionUrl('snooze', homeworkId) },
-      ]
-      : [];
-    opts.toastXml = buildToastXml({ title, body, sound: s.sound, actions });
-  }
-  const n = new Notification(opts);
-  liveNotifications.add(n);
-  const forget = () => liveNotifications.delete(n);
-  n.on('click', () => {
-    const existed = !!mainWindow;
-    const win = showWindow();
-    const send = () => win.webContents.send('notif:open', filter || 'todo');
-    // Fenêtre toute neuve (recréée après une fermeture) : on attend que la page soit chargée
-    if (!existed || win.webContents.isLoading()) win.webContents.once('did-finish-load', send); else send();
-    forget();
-  });
-  n.on('close', forget);
-  n.on('failed', forget);
-  n.show();
-  return true;
-}
-
-function showTrayHintOnce() {
-  const st = readNotifState();
-  if (st.trayHintShown) return;
-  st.trayHintShown = true;
-  writeNotifState(st);
-  notify({
-    title: 'Mes Devoirs reste actif',
-    body: "L'application continue de t'envoyer tes rappels depuis la zone de notification. Clic droit sur son icône pour la quitter.",
-  });
-}
-
-// Envoie les rappels dont l'heure est passée et qui n'ont pas encore été envoyés aujourd'hui
-// (si l'appli était fermée à l'heure prévue, ils partent dès son ouverture).
-function tick() {
-  try {
-    const data = readData();
-    const s = normalizeSettings(data.settings.notifications);
-    const now = new Date();
-    if (isPaused(s, now)) return; // 14. mode vacances : rien du tout
-    const state = readNotifState();
-    const today = ymd(now);
-    const out = [];
-    let changed = false;
-
-    // Rappel quotidien (liste)
-    if (isDue(s, state.lastSent, now)) {
-      state.lastSent = today; changed = true;
-      const digest = buildDigest(data.homework, s, now);
-      if (digest) out.push(digest);
-    }
-
-    // 13. Rappel du matin (abandonné s'il est trop tard dans la journée)
-    if (s.morning && isDueAt(s.morningTime, state.lastMorning, now)) {
-      state.lastMorning = today; changed = true;
-      if (isDueAt(s.morningTime, undefined, now, 240)) {
-        const m = buildMorning(data.homework, s, now);
-        if (m) out.push(m);
-      }
-    }
-
-    // 11. Une notification par devoir, la veille de l'échéance
-    if (s.dueReminder && isDueAt(s.dueTime, state.lastDue, now)) {
-      state.lastDue = today; changed = true;
-      const list = dueTomorrow(data.homework, now);
-      list.slice(0, 5).forEach((h) => out.push(buildReminder(h, now)));
-      if (list.length > 5) out.push({ title: `${list.length - 5} autres devoirs pour demain`, body: 'Ouvre la liste pour les voir.', filter: 'today' });
-    }
-
-    // Devoirs « rappelés demain » dont l'heure est venue
-    const snoozed = state.snoozed && typeof state.snoozed === 'object' ? state.snoozed : {};
-    Object.keys(snoozed).forEach((id) => {
-      if (snoozed[id] > now.getTime()) return;
-      delete snoozed[id]; changed = true;
-      const h = data.homework.find((x) => x && x.id === id);
-      if (h && !h.done) out.push(buildReminder(h, now));
-    });
-    state.snoozed = snoozed;
-
-    if (changed) writeNotifState(state);
-    out.forEach(notify);
-  } catch (e) { /* on réessaiera au prochain passage */ }
-}
-
-// ---------- Synchronisation par dossier ----------
-const syncState = { lastSync: 0, lastError: '', remoteMtime: 0 };
-const syncFilePath = (settings) => {
-  const f = settings && settings.syncFolder;
-  return typeof f === 'string' && f ? path.join(f, sync.FILE_NAME) : null;
-};
-const syncView = (d) => ({
-  homework: d.homework, trash: d.trash, archive: d.archive,
-  subjects: (d.settings && d.settings.subjects) || [], templates: (d.settings && d.settings.templates) || [],
-});
-
-// Fusionne l'état local avec le fichier du dossier partagé (et l'écrit si besoin).
-// Renvoie { data, changedLocal, ok, error }.
-function runSync(data) {
-  const file = syncFilePath(data.settings);
-  if (!file) return { data, changedLocal: false, ok: false, disabled: true };
-  try {
-    let remote = { homework: [], trash: [], archive: [], subjects: [], templates: [] };
-    let exists = false;
-    if (fs.existsSync(file)) {
-      const parsed = sync.parseSyncFile(fs.readFileSync(file, 'utf8'));
-      if (!parsed.ok) { syncState.lastError = parsed.reason; return { data, changedLocal: false, ok: false, error: parsed.reason }; } // on n'écrase jamais un fichier qu'on ne comprend pas
-      remote = parsed.data;
-      exists = true;
-    }
-    const r = sync.mergeData(syncView(data), remote);
-    let out = data;
-    if (r.changedLocal) {
-      out = Object.assign({}, data, {
-        homework: r.merged.homework, trash: r.merged.trash, archive: r.merged.archive,
-        settings: Object.assign({}, data.settings, { subjects: r.merged.subjects, templates: r.merged.templates }),
-      });
-    }
-    if (r.changedRemote || !exists) writeJson(file, sync.buildSyncFile(syncView(out), os.hostname()));
-    syncState.lastSync = Date.now();
-    syncState.lastError = '';
-    try { syncState.remoteMtime = fs.statSync(file).mtimeMs; } catch (e) { /* pas grave */ }
-    return { data: out, changedLocal: r.changedLocal, ok: true };
-  } catch (e) {
-    syncState.lastError = 'access';
-    return { data, changedLocal: false, ok: false, error: 'access' };
-  }
-}
-
-// Ce que l'interface reçoit quand les données changent en dehors d'elle (synchro, notification, widget)
-function pushToMain(data) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('data:changed', {
-      homework: data.homework, trash: data.trash, archive: data.archive,
-      subjects: data.settings.subjects || null, templates: data.settings.templates || null,
-    });
-  }
-}
-
-// Enregistre un changement venu de l'extérieur de la fenêtre (bouton de notification, widget) puis met tout à jour
-function commit(data) {
-  writeData(data);
-  const r = runSync(data);
-  const final = r.changedLocal ? r.data : data;
-  if (r.changedLocal) writeData(final);
-  pushToMain(final);
-  refreshWidget();
-}
-
-// Vérifie de temps en temps si l'autre ordinateur a modifié le fichier partagé
-function syncPoll() {
-  try {
-    const d = readData();
-    const file = syncFilePath(d.settings);
-    if (!file) return;
-    let m = 0;
-    try { m = fs.statSync(file).mtimeMs; } catch (e) { return; }
-    if (m === syncState.remoteMtime) return;
-    const r = runSync(d);
-    if (r.changedLocal) { writeData(r.data); pushToMain(r.data); refreshWidget(); }
-  } catch (e) { /* réessaiera */ }
-}
-
-// 12. Actions des boutons de notification (mesdevoirs://done/ID ou mesdevoirs://snooze/ID)
-function markDone(data, id, done) {
-  const h = data.homework.find((x) => x && x.id === id);
-  if (!h || !!h.done === done) return false;
-  h.done = done;
-  h.doneAt = done ? Date.now() : null;
-  h.updatedAt = Date.now();
-  if (done && h.repeat && h.date) h.pendingSpawn = true; // l'appli créera le prochain devoir à sa prochaine ouverture
-  if (!done && h.spawned) {
-    const n = data.homework.find((x) => x.id === h.spawned);
-    if (n && !n.done) data.homework = data.homework.filter((x) => x !== n);
-    delete h.spawned;
-  }
-  return true;
-}
-
-function handleAction({ action, id }) {
-  try {
-    const data = readData();
-    if (action === 'done') {
-      if (markDone(data, id, true)) commit(data);
-    } else if (action === 'snooze') {
-      const s = notifSettings();
-      const when = new Date();
-      const [hh, mm] = s.morningTime.split(':').map(Number);
-      when.setDate(when.getDate() + 1);
-      when.setHours(hh, mm, 0, 0);
-      const state = readNotifState();
-      state.snoozed = Object.assign({}, state.snoozed, { [id]: when.getTime() });
-      writeNotifState(state);
-    }
-  } catch (e) { /* ignoré */ }
-}
-
-// ---------- Mini-widget (petite fenêtre toujours visible) ----------
-let widgetWin = null;
-const widgetStateFile = () => path.join(app.getPath('userData'), 'widget-state.json');
-function readWidgetState() {
-  try { const s = JSON.parse(fs.readFileSync(widgetStateFile(), 'utf8')); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; }
-}
-function writeWidgetState(patch) {
-  try { writeJson(widgetStateFile(), Object.assign(readWidgetState(), patch)); } catch (e) { /* pas grave */ }
-}
-
-function widgetBoundsOk(b) {
-  if (!b || ![b.x, b.y, b.width, b.height].every(Number.isFinite)) return false;
-  return screen.getAllDisplays().some((d) => {
-    const a = d.workArea;
-    return b.x + 60 < a.x + a.width && b.x + b.width - 60 > a.x && b.y + 30 < a.y + a.height && b.y + 30 > a.y;
-  });
-}
-
-function createWidget() {
-  if (widgetWin) { widgetWin.show(); return widgetWin; }
-  const st = readWidgetState();
-  const b = widgetBoundsOk(st.bounds) ? st.bounds : null;
-  const area = screen.getPrimaryDisplay().workArea;
-  const size = { width: 300, height: 420 };
-  const win = new BrowserWindow({
-    width: b ? b.width : size.width,
-    height: b ? b.height : size.height,
-    x: b ? b.x : area.x + area.width - size.width - 24,
-    y: b ? b.y : area.y + 24,
-    minWidth: 230,
-    minHeight: 160,
-    frame: false,
-    resizable: true,
-    skipTaskbar: true,
-    alwaysOnTop: st.pinned !== false,
-    show: false,
-    title: 'Mes Devoirs · widget',
-    backgroundColor: '#1a1d27',
-    icon: ICON_PATH,
-    webPreferences: { preload: path.join(__dirname, 'widget-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.setMenuBarVisibility(false);
-  win.loadFile(path.join(__dirname, 'src', 'widget.html'));
-  win.once('ready-to-show', () => win.showInactive());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
-  let t = null;
-  const saveBounds = () => { clearTimeout(t); t = setTimeout(() => { if (!win.isDestroyed()) writeWidgetState({ bounds: win.getBounds() }); }, 400); };
-  win.on('moved', saveBounds);
-  win.on('resized', saveBounds);
-  win.on('closed', () => { clearTimeout(t); widgetWin = null; });
-  widgetWin = win;
-  return win;
+  win.once('ready-to-show', () => { if (showWhenReady) revealWindow(); });
+  win.on('close', (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    // Pendant la session, Cartable OS ne se ferme pas ; sinon il se range dans la zone de notification
+    if (!lockedNow()) { closeDevoirsEmbedded(); win.hide(); }
+  });
+  win.on('closed', () => { destroyDevoirsView(); win = null; });
+  ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'].forEach((ev) => win.on(ev, layoutDevoirsView));
+  win.loadFile(path.join(__dirname, 'src', 'index.html'));
 }
 
-function toggleWidget(force) {
-  const want = typeof force === 'boolean' ? force : !widgetWin;
-  if (want) createWidget(); else if (widgetWin) widgetWin.close();
-  return !!widgetWin;
+function revealWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (sessionActive) { if (!win.isFullScreen()) win.setFullScreen(true); } else {
+    if (win.isFullScreen()) win.setFullScreen(false);
+    if (!win.isMaximized()) win.maximize();
+  }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  pushState(true);
 }
 
-function refreshWidget() {
-  if (widgetWin && !widgetWin.isDestroyed()) widgetWin.webContents.send('widget:refresh');
+function showMain() {
+  if (!win || win.isDestroyed()) { showWhenReady = true; createWindow(); return; }
+  showWhenReady = true;
+  revealWindow();
 }
 
-// Ce que le widget a le droit de voir. Avec un code de verrouillage, il n'affiche que des nombres.
-function widgetPayload() {
-  const d = readData();
-  const s = d.settings;
-  const now = new Date();
-  const locked = !!(s.lock && s.lock.hash);
-  const open = d.homework.filter((h) => h && !h.done && h.title);
-  const days = (h) => (h.date ? daysUntil(h.date, now) : null);
-  const base = {
-    locked,
-    language: uiLang,
-    theme: s.theme || 'light',
-    accent: s.accent || 'indigo',
-    compact: !!s.compact,
-    pinned: readWidgetState().pinned !== false,
-    counts: {
-      late: open.filter((h) => days(h) !== null && days(h) < 0).length,
-      today: open.filter((h) => days(h) === 0).length,
-      tomorrow: open.filter((h) => days(h) === 1).length,
+function endSessionWindow() {
+  if (!win || win.isDestroyed()) return;
+  closeDevoirsEmbedded();
+  if (win.isFullScreen()) win.setFullScreen(false);
+  win.hide();
+}
+
+// ---------- Zone de notification ----------
+let trayLocked = null;
+function buildTrayMenu() {
+  return Menu.buildFromTemplate([
+    { label: 'Ouvrir Cartable OS', click: () => showMain() },
+    { label: 'Ouvrir Mes Devoirs (dans Cartable OS)', click: () => { showMain(); openDevoirsEmbedded(); } },
+    { label: 'Ouvrir le logiciel Mes Devoirs', click: () => { openDevoirs(); } },
+    { type: 'separator' },
+    { label: 'Quitter', enabled: !lockedNow(), click: () => quitApp() },
+  ]);
+}
+
+function createTray() {
+  try {
+    const img = nativeImage.createFromPath(ICON_PATH).resize({ width: 16, height: 16 });
+    tray = new Tray(img);
+    tray.setToolTip('Cartable OS');
+    tray.on('click', () => showMain());
+    tray.setContextMenu(buildTrayMenu());
+    trayLocked = lockedNow();
+  } catch (e) { tray = null; }
+}
+
+function quitApp() {
+  if (lockedNow()) return false;
+  quitting = true;
+  app.quit();
+  return true;
+}
+
+// ---------- Boucle principale : session et ouverture des dossiers ----------
+let lastSent = '';
+
+function publicOcc(o) {
+  return o ? { summary: o.summary, subject: subjectOf(o.summary), location: o.location, startMs: o.startMs, endMs: o.endMs, key: o.key } : null;
+}
+
+function appsList() {
+  const list = appsLib.normalizeApps(config.settings.apps);
+  // Deux raccourcis pour Mes Devoirs : le logiciel à part (sa propre fenêtre) et la version intégrée (dans Cartable OS)
+  list.splice(4, 0,
+    { id: 'devoirs', kind: 'devoirs', name: 'Mes Devoirs', sub: 'Logiciel à part', note: 'Le logiciel Mes Devoirs, dans sa propre fenêtre', target: '', builtin: true, fixed: true },
+    { id: 'devoirs-embed', kind: 'devoirs-embed', name: 'Mes Devoirs', sub: 'Dans Cartable OS', note: 'Mes Devoirs ouvert directement dans Cartable OS', target: '', builtin: true, fixed: true });
+  return list;
+}
+
+function publicState(now) {
+  const cur = status.current;
+  return {
+    now,
+    platform: process.platform,
+    version: app.getVersion(),
+    locked: lockedNow(),
+    settings: { lockDuringSession: config.settings.lockDuringSession, openAtLogin: config.settings.openAtLogin, rootFolder: rootFolder() },
+    schedule: {
+      loaded: events.length > 0,
+      courseCount: events.length,
+      subjects: subjects().map((n) => ({ name: n, folder: subjectFolder(n), custom: !!config.settings.subjectFolders[norm(n)] })),
+      today: status.today.map(publicOcc),
+      session: status.session,
+      inSession: status.inSession,
+      current: publicOcc(cur),
+      next: publicOcc(status.next),
+    },
+    apps: appsList(),
+    devoirs: {
+      installed: devoirsInstalled(),
+      embedAvailable: devoirsEmbedAvailable(),
+      embedded: dvShown,
+      summary: devoirs.summarize(homework(), new Date(now), cur ? subjectOf(cur.summary) : ''),
     },
   };
-  if (locked) return Object.assign(base, { items: [], subjects: [] });
-  return Object.assign(base, {
-    subjects: (s.subjects || []).map((x) => ({ name: x.name, color: x.color })),
-    items: open.filter((h) => days(h) !== null && days(h) <= 1).slice(0, 60).map((h) => ({
-      id: h.id, title: String(h.title).slice(0, 200), subject: h.subject || '', date: h.date, priority: h.priority || 1, kind: h.kind || '', minutes: h.minutes || 0,
-      subtasks: (h.subtasks || []).length, subtasksDone: (h.subtasks || []).filter((x) => x.done).length,
-    })),
-  });
 }
 
-ipcMain.handle('widget:load', () => widgetPayload());
-ipcMain.handle('widget:done', (_e, id, done) => {
-  const data = readData();
-  if (markDone(data, String(id), !!done)) commit(data);
-  return true;
-});
-ipcMain.handle('widget:open', () => { showWindow(); return true; });
-ipcMain.handle('widget:new', () => {
-  const existed = !!mainWindow;
-  const win = showWindow();
-  const send = () => win.webContents.send('app:new');
-  if (!existed || win.webContents.isLoading()) win.webContents.once('did-finish-load', send); else send();
-  return true;
-});
-ipcMain.handle('widget:close', () => { if (widgetWin) widgetWin.close(); return true; });
-ipcMain.handle('widget:pin', () => {
-  if (!widgetWin) return true;
-  const pinned = !widgetWin.isAlwaysOnTop();
-  widgetWin.setAlwaysOnTop(pinned);
-  writeWidgetState({ pinned });
-  return pinned;
-});
-ipcMain.handle('widget:toggle', (_e, force) => toggleWidget(typeof force === 'boolean' ? force : undefined));
-ipcMain.handle('widget:state', () => !!widgetWin);
-
-const actionFromArgv = (argv) => (argv || []).map(parseActionUrl).find(Boolean) || null;
-
-function startScheduler() {
-  setTimeout(tick, 4000);
-  setInterval(tick, 30 * 1000);
-  setInterval(syncPoll, 30 * 1000);
+function pushState(force) {
+  if (!win || win.isDestroyed() || win.webContents.isLoading()) return;
+  const now = Date.now();
+  const s = publicState(now);
+  const text = JSON.stringify({ ...s, now: 0 });
+  if (!force && text === lastSent) return;
+  lastSent = text;
+  win.webContents.send('state', s);
 }
 
-// ---------- IPC ----------
-ipcMain.handle('data:load', () => {
-  let d = readData();
-  const r = runSync(d); // si la synchro est active, on repart de la version fusionnée
-  if (r.changedLocal) { d = r.data; writeData(d); }
-  return d;
-});
-ipcMain.handle('data:save', (_e, data) => {
-  const d = {
-    homework: Array.isArray(data && data.homework) ? data.homework : [],
-    trash: Array.isArray(data && data.trash) ? data.trash : [],
-    archive: Array.isArray(data && data.archive) ? data.archive : [],
-    settings: data && data.settings && typeof data.settings === 'object' ? data.settings : {},
-  };
-  writeData(d);
-  applySystemSettings(d.settings);
-  refreshTrayMenu();
-  const r = runSync(d);
-  if (r.changedLocal) { writeData(r.data); pushToMain(r.data); } // l'autre ordinateur avait du nouveau
-  refreshWidget();
-  return true;
-});
+async function tick() {
+  const now = Date.now();
+  refreshOccurrences(now);
+  status = computeStatus(occurrences, now);
 
-// ----- Synchronisation : choix du dossier, état, synchroniser maintenant -----
-ipcMain.handle('sync:pick', async (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
-  const r = await dialog.showOpenDialog(win, { title: T('Choisir le dossier de synchronisation'), properties: ['openDirectory', 'createDirectory'] });
-  if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-  return { ok: true, folder: r.filePaths[0] };
-});
-ipcMain.handle('sync:now', () => {
-  const d = readData();
-  const r = runSync(d);
-  if (r.changedLocal) { writeData(r.data); refreshWidget(); }
-  return {
-    ok: !!r.ok, disabled: !!r.disabled, error: r.error || '', lastSync: syncState.lastSync,
-    data: r.changedLocal ? { homework: r.data.homework, trash: r.data.trash, archive: r.data.archive, subjects: r.data.settings.subjects || null, templates: r.data.settings.templates || null } : null,
-  };
-});
-ipcMain.handle('sync:status', () => ({ lastSync: syncState.lastSync, error: syncState.lastError }));
+  // Début / fin de la session (du premier au dernier cours du jour)
+  if (status.inSession && !sessionActive) { sessionActive = true; showMain(); }
+  else if (!status.inSession && sessionActive) { sessionActive = false; endSessionWindow(); }
+  else if (sessionActive && (!win || win.isDestroyed())) showMain();
 
-// ----- Import d'un emploi du temps depuis un fichier -----
-ipcMain.handle('schedule:import', async (e) => {
-  try {
-    const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
-    const r = await dialog.showOpenDialog(win, {
-      title: T('Importer un emploi du temps'),
-      properties: ['openFile'],
-      filters: [
-        { name: T('Emploi du temps (.csv, .txt, .ics, .json)'), extensions: ['csv', 'txt', 'ics', 'json'] },
-        { name: T('Tous les fichiers'), extensions: ['*'] },
-      ],
-    });
-    if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-    const file = r.filePaths[0];
-    if (fs.statSync(file).size > 1024 * 1024) return { ok: false, reason: 'size' };
-    const rows = parseSchedule(fs.readFileSync(file, 'utf8'), path.extname(file).slice(1));
-    if (!rows.length) return { ok: false, reason: 'empty' };
-    return { ok: true, name: path.basename(file), rows };
-  } catch (err) {
-    return { ok: false, reason: 'read' };
+  // Début d'un cours : on ouvre le dossier de sa matière (une seule fois par cours)
+  const cur = status.current;
+  if (cur && config.state.triggered[cur.key] === undefined) {
+    config.state.triggered[cur.key] = cur.startMs;
+    Object.keys(config.state.triggered).forEach((k) => { if (config.state.triggered[k] < now - 2 * DAY_MS) delete config.state.triggered[k]; });
+    saveConfig();
+    const name = subjectOf(cur.summary);
+    if (name) await openFolder(subjectFolder(name));
   }
+
+  if (tray && trayLocked !== lockedNow()) { tray.setContextMenu(buildTrayMenu()); trayLocked = lockedNow(); }
+  pushState(false);
+}
+
+// ---------- Échanges avec l'interface ----------
+const fromUi = (e) => !!win && !win.isDestroyed() && e.sender === win.webContents;
+const handle = (channel, fn) => ipcMain.handle(channel, (e, ...args) => (fromUi(e) ? fn(...args) : undefined));
+
+handle('state:get', () => publicState(Date.now()));
+
+handle('apps:launch', async (id) => {
+  const a = appsList().find((x) => x.id === id);
+  if (!a) return { ok: false, reason: 'invalid' };
+  if (a.kind === 'devoirs') return openDevoirs();
+  if (a.kind === 'devoirs-embed') return openDevoirsEmbedded();
+  ensureDir(rootFolder());
+  return appsLib.launchApp(a, { shell, spawn, platform: process.platform, rootFolder: rootFolder() });
 });
 
-ipcMain.handle('notif:test', () => {
-  if (!Notification.isSupported()) return { ok: false };
-  const data = readData();
-  const digest = buildDigest(data.homework, data.settings.notifications);
-  const ok = notify({
-    title: 'Les notifications fonctionnent 🎉',
-    body: digest ? `${digest.title}\n${digest.body}` : "Tu n'as aucun devoir à rendre bientôt.",
-    filter: digest ? digest.filter : 'todo',
+handle('apps:add', (name, target) => {
+  const n = appsLib.cleanName(name);
+  const t = appsLib.cleanTarget(target);
+  if (!n) return { ok: false, reason: 'name' };
+  if (appsLib.classifyTarget(t) === 'invalid') return { ok: false, reason: 'target' };
+  if (config.settings.apps.filter((a) => a && a.builtin !== true).length >= 40) return { ok: false, reason: 'full' };
+  config.settings.apps.push({ id: appsLib.newId(), kind: 'custom', name: n, target: t, builtin: false });
+  saveConfig();
+  pushState(true);
+  return { ok: true };
+});
+
+handle('apps:update', (id, name, target) => {
+  const t = appsLib.cleanTarget(target);
+  if (appsLib.classifyTarget(t) === 'invalid') return { ok: false, reason: 'target' };
+  const cur = appsList().find((a) => a.id === id);
+  if (!cur || cur.fixed) return { ok: false, reason: 'invalid' };
+  const list = config.settings.apps;
+  let entry = list.find((a) => a && a.id === id);
+  if (!entry) { entry = { id, kind: cur.kind, builtin: true }; list.push(entry); }
+  entry.target = t;
+  if (!cur.builtin) {
+    const n = appsLib.cleanName(name);
+    if (!n) return { ok: false, reason: 'name' };
+    entry.name = n;
+  }
+  saveConfig();
+  pushState(true);
+  return { ok: true };
+});
+
+handle('apps:remove', (id) => {
+  const before = config.settings.apps.length;
+  config.settings.apps = config.settings.apps.filter((a) => !(a && a.id === id && a.builtin !== true));
+  if (config.settings.apps.length !== before) { saveConfig(); pushState(true); }
+  return { ok: true };
+});
+
+handle('apps:pick', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Choisir un logiciel ou un fichier', properties: ['openFile'] });
+  return r.canceled || !r.filePaths[0] ? '' : r.filePaths[0];
+});
+
+handle('schedule:import', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Choisir le fichier de l\'emploi du temps',
+    properties: ['openFile'],
+    filters: [{ name: 'Agenda (.ics)', extensions: ['ics'] }],
   });
-  return { ok };
-});
-
-// ---------- Sauvegardes (fichiers de mémoire) : export / import ----------
-const FILE_FILTERS = [
-  { name: 'Sauvegarde Mes Devoirs (.json)', extensions: ['json'] },
-  { name: 'Tous les fichiers', extensions: ['*'] },
-];
-let pendingImport = null; // fichier choisi, lu et nettoyé, en attente de la décision de l'utilisateur
-
-ipcMain.handle('backup:export', async (e, data, parts) => {
+  if (r.canceled || !r.filePaths[0]) return { ok: false, reason: 'canceled' };
+  let text;
   try {
-    const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
-    const r = await dialog.showSaveDialog(win, {
-      title: T('Exporter une sauvegarde'),
-      defaultPath: path.join(app.getPath('documents'), backup.defaultFileName()),
-      filters: FILE_FILTERS,
-    });
-    if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-    const file = backup.buildBackup(data, parts, app.getVersion());
-    writeJson(r.filePath, file);
-    return {
-      ok: true,
-      name: path.basename(r.filePath),
-      dir: path.dirname(r.filePath),
-      homework: file.homework ? file.homework.length : null,
-      subjects: file.subjects ? file.subjects.length : null,
-    };
-  } catch (err) {
-    return { ok: false, reason: 'write' };
-  }
-});
-
-ipcMain.handle('backup:pick', async (e) => {
-  pendingImport = null;
+    if (fs.statSync(r.filePaths[0]).size > MAX_ICS_BYTES) return { ok: false, reason: 'big' };
+    text = fs.readFileSync(r.filePaths[0], 'utf8');
+  } catch (e) { return { ok: false, reason: 'read' }; }
+  const parsed = parseIcs(text);
+  if (!parsed.length) return { ok: false, reason: 'empty' };
   try {
-    const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
-    const r = await dialog.showOpenDialog(win, {
-      title: T('Importer une sauvegarde'),
-      properties: ['openFile'],
-      filters: FILE_FILTERS,
-    });
-    if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-    const file = r.filePaths[0];
-    if (fs.statSync(file).size > backup.MAX_FILE_BYTES) return { ok: false, reason: 'size' };
-    const parsed = backup.parseBackup(fs.readFileSync(file, 'utf8'));
-    if (!parsed.ok) return parsed;
-    pendingImport = parsed.data;
-    return { ok: true, name: path.basename(file), counts: parsed.counts, exportedAt: parsed.exportedAt };
-  } catch (err) {
-    return { ok: false, reason: 'read' };
-  }
+    fs.mkdirSync(path.dirname(icsFile()), { recursive: true });
+    fs.writeFileSync(icsFile(), text, 'utf8');
+  } catch (e) { return { ok: false, reason: 'write' }; }
+  events = parsed;
+  occDay = 0;
+  config.state.triggered = {};
+  saveConfig();
+  subjects().forEach((n) => ensureDir(subjectFolder(n)));
+  await tick();
+  pushState(true);
+  return { ok: true, courses: events.length, subjects: subjects().length };
 });
 
-ipcMain.handle('backup:apply', (_e, current, options) => {
-  if (!pendingImport) return { ok: false, reason: 'none' };
-  try {
-    // Copie de secours de l'état actuel avant de toucher à quoi que ce soit
-    try { writeJson(path.join(app.getPath('userData'), 'avant-import.json'), { saved: new Date().toISOString(), ...current }); } catch (err) { /* pas bloquant */ }
-    const r = backup.applyImport(current, pendingImport, options);
-    pendingImport = null;
-    return { ok: true, state: r.state, report: r.report };
-  } catch (err) {
-    return { ok: false, reason: 'apply' };
-  }
+handle('schedule:clear', async () => {
+  try { fs.rmSync(icsFile(), { force: true }); } catch (e) { /* déjà absent */ }
+  events = [];
+  occDay = 0;
+  config.state.triggered = {};
+  saveConfig();
+  await tick();
+  pushState(true);
+  return { ok: true };
 });
 
-ipcMain.handle('backup:cancel', () => { pendingImport = null; return true; });
-
-// ---------- Impression et PDF ----------
-// La page se met en forme toute seule pour l'impression (feuille « #printSheet » dans la feuille de style)
-ipcMain.handle('print:run', (e) => new Promise((resolve) => {
-  try {
-    e.sender.print({ printBackground: true }, (ok, reason) => resolve({ ok: !!ok, reason: String(reason || '') }));
-  } catch (err) { resolve({ ok: false, reason: 'error' }); }
-}));
-
-ipcMain.handle('print:pdf', async (e, name) => {
-  const win = BrowserWindow.fromWebContents(e.sender) || undefined;
-  let base = String(name || 'MesDevoirs.pdf').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80);
-  if (!/\.pdf$/i.test(base)) base += '.pdf';
-  const r = await dialog.showSaveDialog(win, {
-    title: T('Enregistrer en PDF'),
-    defaultPath: path.join(app.getPath('documents'), base),
-    filters: [{ name: 'PDF', extensions: ['pdf'] }],
-  });
-  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-  try {
-    const buf = await e.sender.printToPDF({ printBackground: true, pageSize: 'A4' });
-    fs.writeFileSync(r.filePath, buf);
-    return { ok: true, path: r.filePath };
-  } catch (err) { return { ok: false }; }
+handle('settings:set', (key, value) => {
+  if ((key !== 'lockDuringSession' && key !== 'openAtLogin') || typeof value !== 'boolean') return { ok: false };
+  config.settings[key] = value;
+  saveConfig();
+  if (key === 'openAtLogin') applyLogin();
+  tick();
+  pushState(true);
+  return { ok: true };
 });
 
-// ---------- Fichiers joints et liens ----------
-// Types de fichiers qu'on refuse d'ouvrir depuis l'appli (un fichier de données importé pourrait y pointer)
-const UNSAFE_EXT = new Set([
-  '.exe', '.com', '.bat', '.cmd', '.msi', '.msp', '.scr', '.pif', '.cpl', '.dll', '.sys', '.lnk', '.url', '.reg', '.inf',
-  '.ps1', '.psm1', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh', '.hta', '.jar', '.appx', '.msix', '.application', '.scf', '.gadget',
-]);
-
-ipcMain.handle('file:pick', async (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender) || undefined;
-  const r = await dialog.showOpenDialog(win, { title: T('Joindre un fichier'), properties: ['openFile', 'multiSelections'] });
-  if (r.canceled) return [];
-  return r.filePaths.slice(0, 10).map((p) => ({ path: p, name: path.basename(p) }));
+handle('folder:pickRoot', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Dossier principal de Cartable OS', defaultPath: rootFolder(), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return { ok: false };
+  config.settings.rootFolder = r.filePaths[0];
+  saveConfig();
+  subjects().forEach((n) => ensureDir(subjectFolder(n)));
+  pushState(true);
+  return { ok: true };
 });
 
-ipcMain.handle('file:open', async (_e, filePath) => {
-  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return { ok: false, reason: 'invalid' };
-  if (UNSAFE_EXT.has(path.extname(filePath).toLowerCase())) return { ok: false, reason: 'unsafe' };
-  let st;
-  try { st = fs.statSync(filePath); } catch (err) { return { ok: false, reason: 'missing' }; }
-  if (!st.isFile()) return { ok: false, reason: 'invalid' };
-  const failure = await shell.openPath(filePath);
-  return failure ? { ok: false, reason: 'error' } : { ok: true };
+handle('folder:pickSubject', async (name) => {
+  const n = subjects().find((s) => s === name);
+  if (!n) return { ok: false };
+  const r = await dialog.showOpenDialog(win, { title: `Dossier de ${n}`, defaultPath: subjectFolder(n), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return { ok: false };
+  config.settings.subjectFolders[norm(n)] = r.filePaths[0];
+  saveConfig();
+  pushState(true);
+  return { ok: true };
 });
 
-ipcMain.handle('link:open', (_e, url) => {
-  try {
-    const u = new URL(String(url));
-    if (u.protocol === 'http:' || u.protocol === 'https:') { shell.openExternal(u.href); return true; }
-  } catch (err) { /* lien invalide */ }
-  return false;
+handle('folder:resetSubject', (name) => {
+  delete config.settings.subjectFolders[norm(name)];
+  saveConfig();
+  pushState(true);
+  return { ok: true };
 });
 
-ipcMain.handle('app:version', () => app.getVersion());
-ipcMain.handle('update:check', async (_e, _repo, tag) => {
-  const r = await checkForUpdate(UPDATE_REPO, app.getVersion(), tag);
-  // L'adresse du fichier reste côté principal : l'interface ne peut pas choisir quoi télécharger
-  lastAsset = r && r.asset ? r.asset : null;
-  if (r && r.asset) r.asset = { name: r.asset.name, size: r.asset.size };
-  return r;
+handle('folder:open', async (name) => {
+  const n = subjects().find((s) => s === name);
+  if (!n) return { ok: false };
+  return { ok: await openFolder(subjectFolder(n)) };
 });
 
-// Télécharge l'installeur adapté à l'architecture de ce PC, puis l'ouvre et ferme l'appli
-ipcMain.handle('update:download', async (e) => {
-  if (!lastAsset || !ASSET_URL.test(lastAsset.url)) return { ok: false, reason: 'no-asset' };
-  if (downloading) return { ok: false, reason: 'busy' };
-  downloading = true;
-  try {
-    const dir = path.join(app.getPath('temp'), 'MesDevoirs-update');
-    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (err) { /* anciens fichiers : pas grave */ }
-    const dest = path.join(dir, path.basename(lastAsset.name));
-
-    let lastSent = 0;
-    const r = await downloadFile({
-      url: lastAsset.url,
-      dest,
-      expectedSize: lastAsset.size,
-      sha256: lastAsset.sha256,
-      onProgress: (p) => {
-        const t = Date.now();
-        if (t - lastSent < 100 && p.received !== p.total) return;
-        lastSent = t;
-        if (!e.sender.isDestroyed()) e.sender.send('update:progress', p);
-      },
-    });
-    if (!r.ok) return r;
-
-    const openError = await shell.openPath(dest); // ouvre l'installateur Windows (.msi)
-    if (openError) return { ok: false, reason: 'launch' };
-
-    // On ferme l'appli pour que l'installateur puisse remplacer ses fichiers
-    setTimeout(() => { isQuitting = true; app.quit(); }, 2000);
-    return { ok: true };
-  } finally {
-    downloading = false;
-  }
-});
-ipcMain.handle('update:list', () => listReleases(UPDATE_REPO));
-ipcMain.handle('update:open', (_e, url) => {
-  // On n'ouvre que des pages GitHub
-  if (typeof url === 'string' && /^https:\/\/github\.com\//.test(url)) {
-    shell.openExternal(url);
-    return true;
-  }
-  return false;
-});
+handle('devoirs:open', () => openDevoirs());
+handle('devoirs:openEmbedded', () => openDevoirsEmbedded());
+handle('devoirs:closeEmbedded', () => closeDevoirsEmbedded());
+handle('win:minimize', () => { if (!lockedNow() && win) win.minimize(); });
+handle('win:hide', () => { if (!lockedNow() && win) { closeDevoirsEmbedded(); win.hide(); } });
+handle('app:quit', () => ({ ok: quitApp() }));
 
 // ---------- Démarrage ----------
-// Une seule instance à la fois
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
+function applyLogin() {
+  if (!app.isPackaged || process.platform !== 'win32') return;
+  try { app.setLoginItemSettings({ openAtLogin: !!config.settings.openAtLogin, args: ['--hidden'] }); } catch (e) { /* ignoré */ }
+}
+
+if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', (_e, argv) => {
-    const a = actionFromArgv(argv);
-    if (a) handleAction(a); else showWindow();
-  });
-  app.on('before-quit', () => { isQuitting = true; });
+  app.on('second-instance', () => showMain());
+  app.on('before-quit', () => { quitting = true; });
+  app.on('window-all-closed', () => { /* Cartable OS reste actif en arrière-plan pour suivre l'emploi du temps */ });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
-    const settings = readData().settings;
-    // Lancé par Windows au démarrage : on reste discret dans la zone de notification
-    const launchAction = actionFromArgv(process.argv);
-    const bg = normalizeSettings(settings.notifications).background;
-    const startHidden = (process.argv.includes('--hidden') || !!launchAction) && bg;
-    // Lancé par un bouton de notification alors que l'appli était fermée : on fait l'action et on repart
-    if (launchAction) {
-      handleAction(launchAction);
-      if (!bg) { isQuitting = true; app.quit(); return; }
-    }
-    if (app.isPackaged) { try { app.setAsDefaultProtocolClient('mesdevoirs'); } catch (e) { /* ignoré */ } }
-    createWindow(startHidden);
-    applySystemSettings(settings);
-    if (settings.widgetAuto === true) createWidget();
-    startScheduler();
-    app.on('activate', () => showWindow());
-  });
-
-  app.on('window-all-closed', () => {
-    if (process.platform === 'darwin') return;
-    // En mode « arrière-plan », fermer la fenêtre ne quitte pas l'appli (elle reste dans la zone de notification)
-    if (!isQuitting && notifSettings().background) return;
-    if (!isQuitting && widgetWin) return; // le mini-widget reste ouvert
-    app.quit();
+    session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+    loadConfig();
+    loadSchedule();
+    createTray();
+    applyLogin();
+    ensureDevoirsShortcuts();
+    await tick();
+    // Lancé à la main : on affiche l'écran d'accueil. Lancé par Windows (--hidden) : on attend le prochain cours.
+    if (!process.argv.includes('--hidden') && !sessionActive) showMain();
+    setInterval(() => { tick(); }, TICK_MS);
+    powerMonitor.on('resume', () => { occDay = 0; tick(); });
   });
 }

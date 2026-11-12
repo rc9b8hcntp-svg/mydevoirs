@@ -1,65 +1,95 @@
-# 📚 Mes Devoirs
+# Cartable OS
 
-Un petit logiciel Windows pour noter ses devoirs.
+Un « OS » pour le collège, pour Windows. C'est l'écran d'accueil de l'ordinateur d'un élève :
 
-## Fonctionnalités
+- **Word, Excel, PowerPoint, l'explorateur de fichiers**, et les logiciels ou sites que tu ajoutes toi-même (Réglages → Applications) ;
+- **Mes Devoirs**, de deux façons (voir plus bas) : le logiciel à part, ou **directement dans Cartable OS**. L'écran d'accueil affiche aussi tes devoirs (en retard, aujourd'hui, demain, cette semaine, et ceux de la matière du cours en cours) ;
+- un **fichier d'emploi du temps `.ics`** qui décide :
+  - **quand Cartable OS reste ouvert** : du début du premier cours de la journée à la fin du dernier (plein écran, impossible à fermer pendant ce temps) ;
+  - **quand les dossiers des matières s'ouvrent** : au début de chaque cours, le dossier de la matière s'ouvre tout seul dans l'explorateur.
 
-- Ajouter, modifier, supprimer des devoirs (titre, matière, date, priorité, notes)
-- Cocher un devoir quand il est fait
-- Filtres : À faire, En retard, Cette semaine, Terminés, Tous
-- Matières prédéfinies avec une couleur chacune (Maths, Français, Histoire-Géo…), à choisir en un clic quand on ajoute un devoir
-- Ajouter / retirer des matières et changer leur couleur (Paramètres → Matières, ou directement dans « Nouveau devoir »)
-- Filtre par matière et recherche
-- Vue Liste ou Calendrier, au choix par **mois** ou par **semaine** (lundi à vendredi) (devoirs colorés par matière, clic sur un jour pour ajouter un devoir)
-- Tri par date, priorité, matière ou ajout récent
-- Barres de défilement masquées (on défile toujours à la molette), même en fenêtre réduite ; la fenêtre peut être très étroite (le menu passe alors au-dessus de la liste)
-- Paramètres : thème clair / sombre / automatique, couleur principale, matières, page de démarrage, priorité par défaut, confirmation de suppression
-- Données enregistrées en local dans `%APPDATA%\Mes Devoirs\devoirs.json`
-- Mise à jour : Paramètres → Mise à jour compare ta version avec la dernière « Release » de ton dépôt GitHub et propose de la télécharger. Le menu « Version à rechercher » permet aussi de choisir un **tag** précis (liste des Releases du dépôt) pour viser une version donnée ou revenir en arrière
-- **Notifications** : un rappel quotidien Windows (heure au choix, 18:00 par défaut) listant les devoirs à rendre aujourd'hui / demain / dans la semaine, et ceux en retard. Un clic sur la notification ouvre la bonne liste. Paramètres → Notifications
-- **Notifications avancées** (Paramètres → Notifications) : un rappel par devoir la veille de l'échéance, des boutons « Marquer fait » / « Rappeler demain » dans la notification (sans ouvrir l'appli), un rappel du matin (« tes devoirs du jour »), un mode vacances (coupe les rappels entre deux dates) et le choix du son (ou silencieux)
-- L'appli peut rester dans la zone de notification quand on ferme la fenêtre (pour que les rappels arrivent) et se lancer au démarrage de Windows
-- **Ajout rapide** (touche `Q`) : une phrase suffit, par ex. « maths ex 5 p 42 demain urgent 1h #groupe » (matière, date, priorité, durée et étiquettes sont reconnues ; aperçu en direct)
-- **Modèles de devoirs** avec étapes prêtes (exposé, contrôle, lecture…), modifiables et à créer soi-même
-- **Corbeille** (30 jours, avec restauration) : supprimer un devoir ne le perd plus ; Ctrl+Z reste disponible
-- **Archive automatique** des devoirs terminés depuis plus de N mois (Paramètres → Organisation), consultable et restaurable ; les statistiques les comptent toujours
-- **Import d'emploi du temps** depuis un fichier CSV, TXT, ICS ou JSON (Paramètres → Matières / Emploi du temps)
-- **Mini-widget** toujours visible (en retard / aujourd'hui / demain, cases à cocher), épinglable au-dessus des autres fenêtres, ouvrable depuis la zone de notification
-- **Synchronisation entre ordinateurs** via un dossier partagé (OneDrive, Dropbox, clé USB…) : le fichier `MesDevoirs-synchro.json` est fusionné, la modification la plus récente gagne
-- **Code de verrouillage** (verrouillage automatique après inactivité, `Ctrl+L`). Attention : il masque l'appli mais ne chiffre pas `devoirs.json`
-- **Français / English** (Paramètres → Confort)
-- Raccourcis : `Ctrl+N` nouveau devoir, `Ctrl+F` recherche
+## Un seul build, un seul installeur, deux logiciels
 
-## Versions Windows
+Le dépôt contient les deux projets :
 
-Chaque version est un installeur `.msi` :
-
-| Architecture | Fichier produit |
+| Dossier | Logiciel |
 |---|---|
-| x64 (64 bits) | `MesDevoirs-<version>-x64.msi` |
-| x86 (32 bits) | `MesDevoirs-<version>-ia32.msi` |
-| ARM64 | `MesDevoirs-<version>-arm64.msi` |
+| `/` (racine) | **Cartable OS** (Electron) |
+| `mes-devoirs/` | **Mes Devoirs** (Electron, tel qu'avant) |
 
-L'installeur crée un raccourci sur le Bureau et dans le menu Démarrer.
+Le build construit Mes Devoirs, l'embarque dans Cartable OS et produit **un seul `.msi` par architecture** : `CartableOS-<version>-x64.msi`, `-ia32.msi`, `-arm64.msi`. Une fois installé :
 
-## Sauvegarde (export / import)
+```
+Cartable OS\
+├─ Cartable OS.exe          ← Cartable OS
+└─ Mes Devoirs\
+   └─ Mes Devoirs.exe       ← Mes Devoirs, un logiciel à part entière
+```
 
-**Paramètres → Sauvegarde** permet d'enregistrer tes données dans un fichier `.json` (« fichier de mémoire ») et de les réimporter, par exemple pour changer d'ordinateur.
+Mes Devoirs se lance seul (raccourci Bureau et menu Démarrer, notifications, zone de notification) et garde ses données dans `%APPDATA%\Mes Devoirs\devoirs.json`.
 
-- **Exporter** : choisis ce que le fichier contient (devoirs, matières, réglages), puis où l'enregistrer.
-- **Importer** : choisis un fichier ; l'appli montre son contenu, puis tu décides quoi importer et si tu **fusionnes** (ajoute ce qui manque, sans rien supprimer) ou si tu **remplaces** tout. Avant un import, une copie de tes données actuelles est gardée dans `avant-import.json` (dossier de données de l'appli).
-- Le fichier `devoirs.json` d'une ancienne installation peut aussi être importé.
-- Le dépôt GitHub et le tag de mise à jour ne sont jamais exportés ni importés, par sécurité.
+### Deux raccourcis Mes Devoirs, deux façons de l'ouvrir
+
+Sur l'écran d'accueil de Cartable OS, **Mes Devoirs a deux raccourcis**, qui ouvrent deux choses différentes :
+
+| Raccourci | Ce qu'il ouvre |
+|---|---|
+| **Mes Devoirs** · *Logiciel à part* | Le logiciel Mes Devoirs, dans **sa propre fenêtre** (comme depuis le Bureau) : notifications, mini-widget, mises à jour. |
+| **Mes Devoirs** · *Dans Cartable OS* | Mes Devoirs **directement dans la fenêtre de Cartable OS**, sous la barre du haut. Le bouton **‹ Accueil** de la barre revient à l'écran d'accueil. |
+
+Le bouton **Ouvrir** du panneau « Mes Devoirs » de l'accueil ouvre la version intégrée. Le menu de la zone de notification propose les deux.
+
+Les deux versions utilisent **le même fichier de données** : un devoir noté dans l'une est tout de suite dans l'autre, même si les deux sont ouvertes en même temps (chacune recharge quand l'autre enregistre). Dans la version intégrée, tout fonctionne : devoirs, calendrier, matières, modèles, corbeille, archive, code de verrouillage, sauvegardes (export / import), emploi du temps, synchronisation par dossier, impression et PDF. Seul ce qui dépend du logiciel à part est masqué : mini-widget, notifications Windows (et leur démarrage automatique), mise à jour. Les rappels continuent donc d'être envoyés par le logiciel à part, tant qu'il tourne en arrière-plan.
+
+Techniquement, la version intégrée affiche l'interface de `mes-devoirs/src` dans une vue de la fenêtre (`devoirs-embed.js`, `devoirs-embed-preload.js`). Le dossier `mes-devoirs/` reste celui du logiciel à part ; seule modification : il recharge ses données quand Cartable OS modifie le fichier (`watchDataFile` dans `mes-devoirs/main.js`).
+
+Les raccourcis de Mes Devoirs sont créés par Cartable OS à son premier lancement (l'installeur le lance à la fin). Si tu désinstalles Cartable OS, supprime-les à la main.
+
+> Si l'ancien installeur de Mes Devoirs seul est déjà installé, désinstalle-le avant d'installer Cartable OS (sinon tu auras Mes Devoirs en double). Tes devoirs sont conservés.
+
+## Le fichier d'emploi du temps (.ics)
+
+Réglages → Emploi du temps → **Choisir un fichier .ics**. Le fichier vient de ton agenda (Pronote, ENT, Google Agenda, Outlook…) : un cours = un événement dont le **titre est la matière** (« Maths », « Français »…).
+
+- Les horaires, les fuseaux horaires et les répétitions (chaque semaine, certains jours, jusqu'à une date…) sont gérés, ainsi que les cours déplacés ou annulés.
+- Les événements « toute la journée » (vacances, jours fériés) sont ignorés.
+- Un cours sans heure de fin dure 50 minutes.
+
+**Session** : du début du premier cours à la fin du dernier de la journée. Pendant ce temps, Cartable OS s'ouvre en plein écran (même s'il était rangé dans la zone de notification) et ne se ferme pas. Quand le dernier cours est fini, il se range tout seul. Pour pouvoir le fermer à tout moment : Réglages → Session → désactiver « Empêcher la fermeture pendant les cours ».
+
+**Dossiers des matières** : chaque matière a un dossier, créé tout seul dans `Documents\Cartable OS\<matière>` (dossier principal modifiable, et dossier modifiable matière par matière). Au début de chaque cours, il s'ouvre dans l'explorateur, une seule fois par cours.
+
+Pour que tout se déclenche même juste après l'allumage de l'ordinateur, Cartable OS démarre avec Windows (désactivable dans Réglages → Session) et reste dans la zone de notification.
+
+## Construire
+
+Les installeurs se construisent sur GitHub : onglet **Actions → « Construire Cartable OS (Windows + Mes Devoirs pour Mac) » → Run workflow**. Le workflow construit Mes Devoirs, l'embarque, puis publie une Release avec les `.msi` (et le `.dmg` de Mes Devoirs seul pour Mac).
+
+En local, sous Windows :
+
+```
+npm install
+npm run dist          # construit Mes Devoirs puis l'installeur x64 dans dist/
+```
+
+Pour essayer l'interface sans installer : `npm install` puis `npm start`.
+
+Tests de la logique (emploi du temps, applications, lecture des devoirs, Mes Devoirs intégré, contenu du `.msi`) : `npm test` et `node tests/smoke-main.js`.
 
 ## Mises à jour
 
-**Paramètres → Mise à jour** compare ta version avec la dernière « Release » du dépôt (`rc9b8hcntp-svg/mydevoirs`).
+La mise à jour de Mes Devoirs (Paramètres → Mise à jour) télécharge désormais l'installeur `CartableOS-<version>-<architecture>.msi` de la dernière Release : elle met à jour les deux logiciels d'un coup.
 
-Quand une version est disponible, l'appli affiche d'abord ses **nouveautés** (la description de la release GitHub), puis le bouton **Télécharger et installer** :
-1. choisit tout seul le `.msi` adapté à ton ordinateur (x64, x86 32 bits ou ARM64),
-2. le télécharge avec une barre de progression et vérifie qu'il est complet (taille et empreinte SHA-256 fournie par GitHub),
-3. ouvre l'installateur Windows, puis ferme Mes Devoirs pour que l'installation puisse remplacer ses fichiers.
+## Fichiers
 
-Si aucun installeur ne correspond à ton ordinateur, ou si le téléchargement échoue, l'appli propose d'ouvrir la page de la release à la place.
-
-Le menu « Version à rechercher » permet aussi de choisir un **tag** précis pour viser une version donnée ou revenir en arrière.
+| Fichier | Rôle |
+|---|---|
+| `main.js`, `preload.js` | programme principal et pont sécurisé vers l'interface |
+| `ics.js` | lecture du `.ics` et calcul des cours |
+| `scheduler.js` | session (premier au dernier cours), cours en cours, prochain cours |
+| `apps.js` | liste et lancement des applications |
+| `devoirs-link.js` | lien avec Mes Devoirs (chemins, lecture des devoirs pour l'accueil) |
+| `devoirs-embed.js`, `devoirs-embed-preload.js` | Mes Devoirs intégré : sauvegardes, fichiers, synchro, PDF… pour la vue dans la fenêtre |
+| `src/` | interface (`index.html`, `os.css`, `os.js`) |
+| `scripts/prepare-devoirs.js` | construit Mes Devoirs et le prépare pour l'installeur |
+| `mes-devoirs/` | le projet Mes Devoirs complet (son README, son site, son wiki) |
