@@ -95,6 +95,8 @@ const ICONS = {
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/>',
+  sidebar: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
+  checks: '<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
 };
 
@@ -2590,7 +2592,7 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (e.key === '?') { e.preventDefault(); openHelp(); return; }
-  if (key === 'q' && !e.shiftKey && !e.ctrlKey) { e.preventDefault(); $('quickInput').focus(); return; }
+  if (key === 'q' && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); $('quickInput').focus(); return; }
   if (e.key === '/') { e.preventDefault(); $('search').focus(); return; }
 
   // Chiffres : on lit la touche physique (sur un clavier AZERTY, « 1 » sans Maj donne « & »)

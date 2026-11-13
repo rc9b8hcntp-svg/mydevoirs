@@ -30,9 +30,9 @@ const notifStateFile = () => path.join(app.getPath('userData'), 'notifications-s
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
-let lastAsset = null;   // installeur (.msi) correspondant à ce PC, trouvé par la dernière recherche de mise à jour
+let lastAsset = null;   // installeur (.msi ou .dmg) correspondant à ce PC, trouvé par la dernière recherche de mise à jour
 let downloading = false;
-const ASSET_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[^/\s]+\/[\w.+-]+\.msi$/i;
+const ASSET_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[^/\s]+\/[\w.+-]+\.(msi|dmg)$/i;
 const liveNotifications = new Set(); // évite que Windows/Electron les « oublie » avant le clic
 
 // ---------- Données ----------
@@ -99,6 +99,8 @@ function createWindow(startHidden) {
     backgroundColor: '#f5f6fa',
     icon: ICON_PATH,
     show: !startHidden,
+    // macOS : barre de titre fondue dans l'interface (les 3 boutons restent visibles dans le menu)
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 } } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -738,7 +740,7 @@ ipcMain.handle('update:download', async (e) => {
     });
     if (!r.ok) return r;
 
-    const openError = await shell.openPath(dest); // ouvre l'installateur Windows (.msi)
+    const openError = await shell.openPath(dest); // ouvre l'installateur (.msi sous Windows, .dmg sur Mac)
     if (openError) return { ok: false, reason: 'launch' };
 
     // On ferme l'appli pour que l'installateur puisse remplacer ses fichiers
@@ -771,7 +773,16 @@ if (!gotLock) {
   app.on('before-quit', () => { isQuitting = true; });
 
   app.whenReady().then(() => {
-    Menu.setApplicationMenu(null);
+    // Windows : pas de barre de menu. Mac : menu minimal, sans lui Cmd+C / Cmd+V / Cmd+Q ne marchent pas.
+    if (process.platform === 'darwin') {
+      Menu.setApplicationMenu(Menu.buildFromTemplate([
+        { role: 'appMenu' },
+        { role: 'editMenu' },
+        { role: 'windowMenu' },
+      ]));
+    } else {
+      Menu.setApplicationMenu(null);
+    }
     const settings = readData().settings;
     // Lancé par Windows au démarrage : on reste discret dans la zone de notification
     const launchAction = actionFromArgv(process.argv);

@@ -48,10 +48,12 @@ async function getJson(url, fetchFn) {
   try { return { json: await res.json() }; } catch (e) { return { err: { status: 'error' } }; }
 }
 
-// Choisit le .msi qui correspond à l'architecture (x64, ia32, arm64) parmi les fichiers d'une release
-function pickAsset(assets, arch) {
+// Choisit l'installeur qui correspond au système et à l'architecture parmi les fichiers d'une release :
+// .msi sous Windows (x64, ia32, arm64), .dmg sur Mac (x64, arm64)
+function pickAsset(assets, arch, platform = process.platform) {
   if (!Array.isArray(assets)) return null;
-  const re = new RegExp(`-${String(arch).replace(/[^\w]/g, '')}\\.msi$`, 'i');
+  const ext = platform === 'darwin' ? 'dmg' : 'msi';
+  const re = new RegExp(`-${String(arch).replace(/[^\w]/g, '')}\\.${ext}$`, 'i');
   const a = assets.find((x) => x && typeof x.name === 'string' && re.test(x.name) && typeof x.browser_download_url === 'string');
   if (!a) return null;
   const m = /^sha256:([0-9a-f]{64})$/i.exec(String(a.digest || ''));
@@ -59,7 +61,7 @@ function pickAsset(assets, arch) {
 }
 
 // tagInput vide = dernière version ; sinon la version publiée avec ce tag
-async function checkForUpdate(repoInput, currentVersion, tagInput = '', fetchFn = fetch, arch = process.arch) {
+async function checkForUpdate(repoInput, currentVersion, tagInput = '', fetchFn = fetch, arch = process.arch, platform = process.platform) {
   const repo = normalizeRepo(repoInput);
   if (!repo) return { status: 'no-repo' };
   const tag = normalizeTag(tagInput);
@@ -83,7 +85,7 @@ async function checkForUpdate(repoInput, currentVersion, tagInput = '', fetchFn 
     tag: json.tag_name || tag,
     url: typeof json.html_url === 'string' ? json.html_url : `https://github.com/${repo}/releases/latest`,
     repo,
-    asset: pickAsset(json.assets, arch),
+    asset: pickAsset(json.assets, arch, platform),
     notes: typeof json.body === 'string' ? json.body.slice(0, 20000) : '',
   };
 }

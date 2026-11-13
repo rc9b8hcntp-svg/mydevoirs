@@ -1,6 +1,6 @@
 # 📚 Mes Devoirs
 
-Un petit logiciel Windows pour noter ses devoirs.
+Un petit logiciel pour noter ses devoirs, pour Windows et Mac.
 
 ## Fonctionnalités
 
@@ -28,7 +28,8 @@ Un petit logiciel Windows pour noter ses devoirs.
 - **Synchronisation entre ordinateurs** via un dossier partagé (OneDrive, Dropbox, clé USB…) : le fichier `MesDevoirs-synchro.json` est fusionné, la modification la plus récente gagne
 - **Code de verrouillage** (verrouillage automatique après inactivité, `Ctrl+L`). Attention : il masque l'appli mais ne chiffre pas `devoirs.json`
 - **Français / English** (Paramètres → Confort)
-- Raccourcis : `Ctrl+N` nouveau devoir, `Ctrl+F` recherche
+- Raccourcis : `Ctrl+N` nouveau devoir, `Ctrl+F` recherche, `Ctrl+B` réduire / agrandir le menu
+- **Interface** : menu latéral plein hauteur et repliable, ajout rapide + recherche + tri sur une seule ligne, panneau d'accueil compact, formulaire « Nouveau devoir » avec boutons toujours visibles (notes, étapes, étiquettes et fichiers dans « Plus de détails »), barre de titre intégrée sur Mac
 
 ## Versions Windows
 

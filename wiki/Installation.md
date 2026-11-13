@@ -16,8 +16,10 @@ L'installeur crée un raccourci sur le Bureau et dans le menu Démarrer.
 
 | Ordinateur | Fichier |
 |---|---|
-| Apple Silicon (M1, M2, M3…) | installeur `.dmg` |
-| Intel | installeur `.dmg` |
+| Apple Silicon (M1, M2, M3…) | `MesDevoirs-<version>-arm64.dmg` |
+| Intel | `MesDevoirs-<version>-x64.dmg` |
+
+Ouvre le `.dmg`, puis glisse **Mes Devoirs** dans le dossier Applications. L'appli n'est pas notarisée par Apple : au premier lancement, fais un clic droit sur l'appli → **Ouvrir** → **Ouvrir**.
 
 ## Mises à jour
 

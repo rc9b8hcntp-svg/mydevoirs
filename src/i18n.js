@@ -10,6 +10,9 @@
 }(typeof self !== 'undefined' ? self : this, function () {
   // [français, anglais]
   const PAIRS = [
+    // --- Interface v2
+    ['Réduire le menu (Ctrl+B)', 'Collapse sidebar (Ctrl+B)'], ['Réduire le menu', 'Collapse sidebar'], ['Agrandir le menu', 'Expand sidebar'],
+    ['Plus de détails', 'More details'], ['Notes, étapes, étiquettes, fichiers', 'Notes, steps, tags, files'], ['Paramètres (Ctrl+,)', 'Settings (Ctrl+,)'],
     // --- Général
     ['Mes Devoirs', 'My Homework'], ['📚 Mes Devoirs', '📚 My Homework'],
     ['Nouveau devoir (Ctrl+N)', 'New assignment (Ctrl+N)'], ['Nouveau devoir', 'New assignment'],

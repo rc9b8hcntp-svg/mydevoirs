@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Mes Devoirs : un petit logiciel pour noter ses devoirs, avec rappels, calendrier et ajout rapide. Pour Windows et Mac.">
+<meta name="description" content="Mes Devoirs : un petit logiciel pour noter ses devoirs, avec rappels, calendrier et ajout rapide. Pour Mac et Windows.">
 <link rel="icon" type="image/png" href="icon.png">
 <style>:root { color-scheme: light; }</style>
+<script>(function(){var u=navigator.userAgent||'',p=navigator.platform||'';var m=/Android|iPhone|iPad|iPod/i.test(u);document.documentElement.classList.add(!m&&/Win/i.test(p+u)?'os-win':'os-mac');})();</script>
 <title>Mes Devoirs</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
 <style>
@@ -272,6 +273,38 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; display: f
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 .actions .btn { margin-top: 0; }
 .dl-hint { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.btn .ic { width: 18px; height: 18px; fill: currentColor; margin: -2px 8px 0 -4px; }
+.btn.alt { background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow); }
+/* Mac d'abord ; un visiteur Windows voit son bouton en premier et en couleur */
+.os-win .actions .dl-win { order: -1; background: var(--accent); color: var(--on-accent); border: 0; box-shadow: none; }
+.os-win .actions .dl-mac { background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.os-mac .actions .dl-win { background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow); }
+/* Fenêtre d'aperçu : feux tricolores Mac par défaut, boutons Windows pour un visiteur Windows */
+.win-bar .dots { display: flex; gap: 7px; margin-right: 6px; }
+.win-bar .dots i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.win-bar .dots i:nth-child(2) { background: #febc2e; }
+.win-bar .dots i:nth-child(3) { background: #28c840; }
+.win-bar { padding-left: 16px; }
+.os-win .win-bar .dots, .os-mac .win-bar .ctl { display: none; }
+.os-win .win-bar { padding-left: 14px; }
+/* Installation */
+.badge { display: inline-block; vertical-align: middle; margin-left: 8px; padding: 2px 10px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 500 11px var(--body); letter-spacing: .02em; text-transform: none; }
+.mac-card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 26px; box-shadow: var(--shadow-up); margin-bottom: 20px; display: grid; gap: 18px; }
+.mc-head { display: flex; align-items: center; gap: 10px; }
+.mc-head h3 { font-size: 1.5rem; letter-spacing: -.03em; }
+.mc-head .ic { width: 24px; height: 24px; fill: currentColor; }
+.badge[hidden] { display: none; }
+.mc-head .badge { margin-left: auto; }
+.mc-dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mc-opt { display: grid; gap: 2px; align-content: start; padding: 16px 18px; border-radius: 16px; background: var(--soft); }
+.mc-opt b { font-size: 16px; }
+.mc-opt > span { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.mc-opt a { color: var(--accent); font-weight: 500; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.mc-opt .sz { color: var(--muted); font-size: 13px; margin-left: 8px; }
+.mc-tip { color: var(--muted); font-size: 14px; margin: 0; }
+.mc-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 15px; }
+.win-tbl { margin-top: 0; }
+@media (max-width: 560px) { .mc-dl { grid-template-columns: minmax(0, 1fr); } .mac-card { padding: 20px; } }
 .tbl td a { color: var(--accent); text-underline-offset: 3px; font-weight: 500; }
 .tbl .sz { color: var(--muted); font-size: 13px; margin-left: 8px; }
 </style>
@@ -288,16 +321,16 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; display: f
 
 <main class="wrap" id="haut">
   <section class="hero">
-    <p class="kicker">Logiciel pour Windows et Mac</p>
+    <p class="kicker">Logiciel pour Mac et Windows</p>
     <h1>Ne rate plus aucun devoir.</h1>
     <p class="lead">Mes Devoirs est un petit logiciel pour noter ses devoirs, les retrouver par jour ou par matière, et recevoir un rappel avant chaque échéance.</p>
-    <div class="actions"><a class="btn" id="heroDl" href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Télécharger</a><span class="dl-hint" id="heroVer"></span></div>
-    <div class="chips"><span class="chip">Windows et Mac</span><span class="chip">Données gardées sur ton ordinateur</span><span class="chip">Français et English</span><span class="chip">Licence MIT</span></div>
+    <div class="actions"><a class="btn dl-mac" id="heroMac" href="#installer"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7 2-1.1 2.8-2.2c.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.9zM14.2 5.8c.6-.8 1.1-1.8.9-2.8-.9 0-2 .6-2.6 1.3-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.6-1.2z"/></svg>Télécharger pour Mac</a><a class="btn dl-win" id="heroWin" href="#installer">Télécharger pour Windows</a><span class="dl-hint" id="heroVer"></span></div>
+    <div class="chips"><span class="chip">Mac et Windows</span><span class="chip">Données gardées sur ton ordinateur</span><span class="chip">Français et English</span><span class="chip">Licence MIT</span></div>
   </section>
 
   <section class="stage" id="apercu" aria-label="Aperçu de l'application">
     <div class="win">
-      <div class="win-bar"><img alt="" src="icon.png"><span>Mes Devoirs</span><span class="ctl" aria-hidden="true">– ▢ ✕</span></div>
+      <div class="win-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><img alt="" src="icon.png"><span>Mes Devoirs</span><span class="ctl" aria-hidden="true">– ▢ ✕</span></div>
       <div class="app">
         <aside class="side">
           <div class="b"><img alt="" src="icon.png">Mes Devoirs</div>
@@ -370,17 +403,17 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; display: f
       <p>Mes Devoirs prévient avant l'échéance, même quand la fenêtre est fermée. Un clic sur la notification ouvre la bonne liste.</p>
     </div>
     <div class="rem">
-      <div class="toast" role="img" aria-label="Exemple de notification Windows">
+      <div class="toast" role="img" aria-label="Exemple de notification">
         <div class="th"><img alt="" src="icon.png"><span>Mes Devoirs</span><span>18:00</span></div>
         <div><h4>Pour demain</h4><p>Exercices 3 à 7 page 142 (Maths) et Vocabulaire unit 5 (Anglais).</p></div>
         <div class="acts"><span>Marquer fait</span><span>Rappeler demain</span></div>
       </div>
       <div class="list">
-        <div><h3>Rappel quotidien</h3><p>Une notification Windows à l'heure de ton choix (18:00 par défaut) avec les devoirs à rendre aujourd'hui, demain ou dans la semaine, et ceux en retard.</p></div>
+        <div><h3>Rappel quotidien</h3><p>Une notification sur ton Mac ou ton PC, à l'heure de ton choix (18:00 par défaut) avec les devoirs à rendre aujourd'hui, demain ou dans la semaine, et ceux en retard.</p></div>
         <div><h3>Un rappel par devoir</h3><p>La veille de l'échéance, avec les boutons « Marquer fait » et « Rappeler demain » directement dans la notification.</p></div>
         <div><h3>Rappel du matin</h3><p>« Tes devoirs du jour », avant de partir.</p></div>
         <div><h3>Mode vacances</h3><p>Coupe les rappels entre deux dates. Le son se choisit, ou se coupe.</p></div>
-        <div><h3>Toujours là</h3><p>L'appli peut rester dans la zone de notification quand on ferme la fenêtre, et se lancer au démarrage de Windows.</p></div>
+        <div><h3>Toujours là</h3><p>L'appli peut rester active quand on ferme la fenêtre (barre de menus sur Mac, zone de notification sous Windows), et se lancer à l'ouverture de ta session.</p></div>
       </div>
     </div>
   </section>
@@ -454,23 +487,35 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; display: f
 
   <section class="sec" id="installer">
     <div class="intro">
-      <h2>Installer sur Windows et Mac.</h2>
-      <p>Chaque version contient un installeur <code>.msi</code> pour Windows et un installeur <code>.dmg</code> pour Mac. Sous Windows, il crée un raccourci sur le Bureau et dans le menu Démarrer.</p>
+      <h2>Installer sur Mac et Windows.</h2>
+      <p>Chaque version contient un installeur <code>.dmg</code> pour Mac et un installeur <code>.msi</code> pour Windows.</p>
       <a class="btn" id="dlMain" href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Télécharger la dernière version</a>
     </div>
     <div>
-      <div class="tbl"><table>
-        <thead><tr><th>Ordinateur</th><th>Téléchargement</th></tr></thead>
+      <div class="mac-card">
+        <div class="mc-head"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7 2-1.1 2.8-2.2c.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.9zM14.2 5.8c.6-.8 1.1-1.8.9-2.8-.9 0-2 .6-2.6 1.3-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.6-1.2z"/></svg><h3>Mac</h3><span class="badge" data-me="mac" hidden>Ton ordinateur</span></div>
+        <div class="mc-dl">
+          <div class="mc-opt"><b>Apple Silicon</b><span>M1, M2, M3, M4…</span><div data-k="mac-arm64"><a href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Voir la dernière version</a></div></div>
+          <div class="mc-opt"><b>Mac Intel</b><span>Modèles plus anciens</span><div data-k="mac-x64"><a href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Voir la dernière version</a></div></div>
+        </div>
+        <p class="mc-tip">Pas sûr de ton Mac ? Menu  → « À propos de ce Mac » : « Puce Apple » = Apple Silicon, « Processeur Intel » = Intel.</p>
+        <ol class="mc-steps">
+          <li>Ouvre le fichier <code>.dmg</code> téléchargé.</li>
+          <li>Glisse <b>Mes Devoirs</b> dans le dossier <b>Applications</b>.</li>
+          <li>Au premier lancement, si macOS refuse d'ouvrir l'app : <b>Réglages Système → Confidentialité et sécurité → « Ouvrir quand même »</b> (sur les anciens macOS : clic droit sur l'app → Ouvrir).</li>
+        </ol>
+      </div>
+
+      <div class="tbl win-tbl"><table>
+        <thead><tr><th>Windows <span class="badge" data-me="win" hidden>Ton ordinateur</span></th><th>Téléchargement (.msi)</th></tr></thead>
         <tbody>
           <tr><td>Windows x64 (64 bits)</td><td data-k="win-x64"><a href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Voir la dernière version</a></td></tr>
           <tr><td>Windows x86 (32 bits)</td><td data-k="win-ia32"><a href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Voir la dernière version</a></td></tr>
           <tr><td>Windows ARM64</td><td data-k="win-arm64"><a href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Voir la dernière version</a></td></tr>
-          <tr><td>Mac Apple Silicon (M1, M2, M3…)</td><td data-k="mac-arm64"><a href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Voir la dernière version</a></td></tr>
-          <tr><td>Mac Intel</td><td data-k="mac-x64"><a href="https://github.com/rc9b8hcntp-svg/mydevoirs/releases/latest">Voir la dernière version</a></td></tr>
         </tbody>
       </table></div>
       <p class="note" id="dlVer" aria-live="polite"></p>
-      <p class="note">Les installeurs se trouvent dans les versions du dépôt <a href="https://github.com/rc9b8hcntp-svg/mydevoirs" target="_blank" rel="noopener">rc9b8hcntp-svg/mydevoirs</a>, une copie non affiliée du projet <a href="https://github.com/jgirardet/mydevoirs" target="_blank" rel="noopener">mydevoirs</a>. Un problème ou une suggestion ? Laisse un message dans <a href="https://github.com/rc9b8hcntp-svg/mydevoirs/issues" target="_blank" rel="noopener">Issues</a>.</p>
+      <p class="note">Sous Windows, l'installeur crée un raccourci sur le Bureau et dans le menu Démarrer. Les installeurs se trouvent dans les versions du dépôt <a href="https://github.com/rc9b8hcntp-svg/mydevoirs" target="_blank" rel="noopener">rc9b8hcntp-svg/mydevoirs</a>, une copie non affiliée du projet <a href="https://github.com/jgirardet/mydevoirs" target="_blank" rel="noopener">mydevoirs</a>. Un problème ou une suggestion ? Laisse un message dans <a href="https://github.com/rc9b8hcntp-svg/mydevoirs/issues" target="_blank" rel="noopener">Issues</a>.</p>
     </div>
   </section>
 
@@ -648,10 +693,9 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; display: f
   var ua = navigator.userAgent || '', pf = navigator.platform || '';
   var mobile = /Android|iPhone|iPad|iPod/i.test(ua);
   var os = mobile ? 'other' : /Win/i.test(pf + ua) ? 'win' : /Mac/i.test(pf + ua) ? 'mac' : 'other';
-  var hero = $('heroDl'), main = $('dlMain'), heroVer = $('heroVer'), ver = $('dlVer');
-  var label = os === 'win' ? 'Télécharger pour Windows' : os === 'mac' ? 'Télécharger pour Mac' : 'Télécharger';
-  hero.textContent = label;
-  if (os !== 'other') hero.href = main.href = '#installer';
+  var heroMac = $('heroMac'), heroWin = $('heroWin'), main = $('dlMain'), heroVer = $('heroVer'), ver = $('dlVer');
+  if (os !== 'other') main.href = '#installer';
+  document.querySelectorAll('.badge[data-me]').forEach(function (b) { b.hidden = b.getAttribute('data-me') !== os; });
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function keyOf(name) {
     var n = name.toLowerCase();
@@ -669,7 +713,7 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; display: f
   ]).then(function (res) {
     var rel = res[0], hi = res[1] || {}, map = {};
     (rel.assets || []).forEach(function (a) { var k = keyOf(a.name); if (k && !map[k]) map[k] = a; });
-    document.querySelectorAll('td[data-k]').forEach(function (td) {
+    document.querySelectorAll('[data-k]').forEach(function (td) {
       var a = map[td.getAttribute('data-k')];
       td.innerHTML = a
         ? '<a href="' + esc(a.browser_download_url) + '">' + esc(a.name) + '</a><span class="sz">' + Math.max(1, Math.round(a.size / 1048576)) + ' Mo</span>'
@@ -681,15 +725,15 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; display: f
     if (os === 'win') {
       var k = hi.architecture === 'arm' ? 'win-arm64' : (hi.architecture === 'x86' && hi.bitness === '32') ? 'win-ia32' : 'win-x64';
       var a = map[k] || map['win-x64'];
-      if (a) { hero.href = main.href = a.browser_download_url; heroVer.textContent = v + ' · ' + a.name; }
+      if (a) { heroWin.href = main.href = a.browser_download_url; heroVer.textContent = v + ' · ' + a.name; }
     } else if (os === 'mac') {
-      heroVer.textContent = 'Version ' + v + ' : choisis Apple Silicon ou Intel plus bas';
+      heroVer.textContent = 'Version ' + v + ' · choisis Apple Silicon ou Intel plus bas';
     } else {
       heroVer.textContent = 'Version ' + v;
     }
   }).catch(function () {
     ver.textContent = 'Impossible de lire la dernière version pour le moment. Les liens ouvrent la page des versions sur GitHub.';
-    hero.href = main.href = REL;
+    heroMac.href = heroWin.href = main.href = REL;
   });
 })();
 </script>
