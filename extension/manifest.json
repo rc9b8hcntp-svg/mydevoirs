@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Mes Devoirs – Ajouter",
+  "version": "1.0.0",
+  "description": "Ajoute un devoir à l'appli Mes Devoirs en un clic depuis Pronote ou École Directe.",
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.ecoledirecte.com/*",
+        "https://*.index-education.net/*",
+        "https://*/pronote/*",
+        "https://*/*/pronote/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "http://127.0.0.1:47653/*"
+  ]
+}

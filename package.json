@@ -52,6 +52,12 @@
       "shortcutName": "Mes Devoirs",
       "runAfterFinish": true,
       "warningsAsErrors": false
+    },
+    "protocols": {
+      "name": "Mes Devoirs",
+      "schemes": [
+        "mesdevoirs"
+      ]
     }
   },
   "devDependencies": {

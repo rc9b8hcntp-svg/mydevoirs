@@ -204,6 +204,16 @@ function actionUrl(action, id) {
 
 // Lit une adresse mesdevoirs://done/ID ou mesdevoirs://snooze/ID
 function parseActionUrl(arg) {
+  const add = /^mesdevoirs:\/\/add\/?\?(.*)$/i.exec(String(arg || ''));
+  if (add) {
+    try {
+      const q = new URLSearchParams(add[1]);
+      const title = String(q.get('title') || '').trim().slice(0, 120);
+      if (!title) return null;
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(q.get('date') || '') ? q.get('date') : '';
+      return { action: 'add', fields: { title, subject: String(q.get('subject') || '').trim().slice(0, 60), date, notes: String(q.get('notes') || '').trim().slice(0, 2000) } };
+    } catch (e) { return null; }
+  }
   const m = /^mesdevoirs:\/\/(done|snooze)\/([^/?#\s]+)\/?$/i.exec(String(arg || ''));
   if (!m) return null;
   try { return { action: m[1].toLowerCase(), id: decodeURIComponent(m[2]) }; } catch (e) { return null; }

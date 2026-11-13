@@ -1,3 +1,4 @@
+const http = require('http');
 const { app, BrowserWindow, ipcMain, Menu, shell, Notification, Tray, nativeImage, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -360,10 +361,19 @@ function markDone(data, id, done) {
   return true;
 }
 
-function handleAction({ action, id }) {
+function handleAction({ action, id, fields }) {
   try {
     const data = readData();
-    if (action === 'done') {
+    if (action === 'add' && fields) {
+      const pr = Number(data.settings && data.settings.defaultPriority) || 1;
+      data.homework.push({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), done: false, created: Date.now(), updatedAt: Date.now(),
+        title: fields.title, subject: fields.subject, date: fields.date, priority: pr, notes: fields.notes,
+        kind: '', minutes: 0, repeat: '', tags: [], subtasks: [], attachments: [], grade: null, gradeMax: null, coef: null,
+      });
+      commit(data);
+      try { new Notification({ title: 'Mes Devoirs', body: 'Ajouté : ' + fields.title, silent: true }).show(); } catch (e) { /* ignoré */ }
+    } else if (action === 'done') {
       if (markDone(data, id, true)) commit(data);
     } else if (action === 'snooze') {
       const s = notifSettings();
@@ -760,6 +770,40 @@ ipcMain.handle('update:open', (_e, url) => {
   return false;
 });
 
+// ---------- Petit serveur local pour l'extension navigateur (127.0.0.1 uniquement) ----------
+// Permet à l'extension de savoir si l'appli est installée/lancée, et d'ajouter un devoir sans fenêtre de confirmation.
+const EXT_PORT = 47653;
+function startExtensionServer() {
+  const okOrigin = (o) => !o || /^(chrome|moz|safari-web)-extension:\/\//.test(o) || /^extension:\/\//.test(o);
+  const server = http.createServer((req, res) => {
+    const origin = req.headers.origin || '';
+    const host = String(req.headers.host || '');
+    // Refuse les pages web (et les attaques par « DNS rebinding ») : seules les extensions peuvent parler à l'appli
+    if (!okOrigin(origin) || !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) { res.writeHead(403); res.end(); return; }
+    const headers = { 'Content-Type': 'application/json' };
+    if (origin) { headers['Access-Control-Allow-Origin'] = origin; headers['Access-Control-Allow-Headers'] = 'Content-Type'; }
+    if (req.method === 'OPTIONS') { res.writeHead(204, headers); res.end(); return; }
+    if (req.method === 'GET' && req.url === '/ping') { res.writeHead(200, headers); res.end('{"ok":true,"app":"mes-devoirs"}'); return; }
+    if (req.method === 'POST' && req.url === '/add') {
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const f = JSON.parse(body);
+          const a = parseActionUrl('mesdevoirs://add?' + new URLSearchParams({ title: f.title || '', subject: f.subject || '', date: f.date || '', notes: f.notes || '' }));
+          if (!a) { res.writeHead(400, headers); res.end('{"ok":false}'); return; }
+          handleAction(a);
+          res.writeHead(200, headers); res.end('{"ok":true}');
+        } catch (e) { res.writeHead(400, headers); res.end('{"ok":false}'); }
+      });
+      return;
+    }
+    res.writeHead(404, headers); res.end();
+  });
+  server.on('error', () => { /* port déjà pris : l'extension se rabattra sur mesdevoirs:// */ });
+  server.listen(EXT_PORT, '127.0.0.1');
+}
+
 // ---------- Démarrage ----------
 // Une seule instance à la fois
 const gotLock = app.requestSingleInstanceLock();
@@ -770,6 +814,8 @@ if (!gotLock) {
     const a = actionFromArgv(argv);
     if (a) handleAction(a); else showWindow();
   });
+  // macOS : les adresses mesdevoirs://… arrivent par cet événement (extension navigateur)
+  app.on('open-url', (e, url) => { e.preventDefault(); const a = parseActionUrl(url); if (a) handleAction(a); });
   app.on('before-quit', () => { isQuitting = true; });
 
   app.whenReady().then(() => {
@@ -795,6 +841,7 @@ if (!gotLock) {
     }
     if (app.isPackaged) { try { app.setAsDefaultProtocolClient('mesdevoirs'); } catch (e) { /* ignoré */ } }
     createWindow(startHidden);
+    startExtensionServer();
     applySystemSettings(settings);
     if (settings.widgetAuto === true) createWidget();
     startScheduler();
