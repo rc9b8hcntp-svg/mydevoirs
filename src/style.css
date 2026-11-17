@@ -1360,3 +1360,105 @@ dialog.editdlg[open] { display: flex; flex-direction: column; }
   #collapseBtn { display: none; }
   .foot-tools { flex-wrap: wrap; }
 }
+
+/* =====================================================================
+   Onglet Notes : carnet de notes libres (liste à gauche, éditeur à droite).
+   Quand il est ouvert (« notes-mode »), il remplace le reste de la page.
+   ===================================================================== */
+.nav-group { display: flex; flex-direction: column; gap: 10px; }
+.content.notes-mode > :not(#notesPage) { display: none !important; }
+
+.notes-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px; }
+.notes-page .page-head { flex-shrink: 0; }
+.notes-sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.notes-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(210px, 300px) minmax(0, 1fr); gap: 16px; }
+
+.notes-side { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.notes-side .search-box { flex: none; }
+.notes-side .search-box input { width: 100%; height: 44px; background: var(--panel); }
+.note-list { list-style: none; margin: 0; padding: 2px 2px 16px; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.note-none { padding: 22px 10px; text-align: center; color: var(--muted); font-size: 14px; }
+
+.note-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  text-align: left;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.note-item:hover { border-color: color-mix(in srgb, var(--text) 16%, transparent); }
+.note-item.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+.note-item .n-title { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-item .n-prev { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-item .n-date { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.note-item .ph { color: var(--muted); font-weight: 400; font-style: italic; }
+
+.note-editor {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: border-color .18s var(--ease);
+}
+.note-editor:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.note-form { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.note-form input.note-title {
+  width: 100%;
+  padding: 18px 22px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.note-form textarea.note-body {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 22px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  resize: none;
+  line-height: 1.6;
+  font-size: 15px;
+}
+/* Le contour de focus est porté par la carte entière (.note-editor:focus-within) */
+.note-form input:focus, .note-form textarea:focus,
+.note-form input:focus-visible, .note-form textarea:focus-visible { outline: none; }
+.note-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px 9px 22px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 2.5%, var(--panel));
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.note-when { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-del .ico { width: 15px; height: 15px; }
+.note-del:hover { color: var(--danger); }
+
+.note-empty { margin: auto; padding: 40px 24px; text-align: center; color: var(--muted); }
+.note-empty .ico { display: flex; width: 34px; height: 34px; margin: 0 auto 12px; opacity: .6; }
+.note-empty p { margin: 0; }
+.note-empty .ne-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.note-empty .ne-hint { margin-top: 4px; font-size: 14px; }
+.note-empty .ne-hint:empty { display: none; }
+
+@media (max-width: 760px) {
+  .notes-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 34%) minmax(0, 1fr); }
+}

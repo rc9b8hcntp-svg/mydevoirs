@@ -10,6 +10,13 @@
 }(typeof self !== 'undefined' ? self : this, function () {
   // [français, anglais]
   const PAIRS = [
+    // --- Onglet Notes
+    ['Nouvelle note', 'New note'], ['Rechercher une note…', 'Search notes…'], ['Titre de la note', 'Note title'],
+    ['Écris ta note ici…', 'Write your note here…'], ['Contenu de la note', 'Note content'], ['Sans titre', 'Untitled'],
+    ['Note vide', 'Empty note'], ['Modifiée', 'Edited'], ['Supprimer cette note', 'Delete this note'], ['Supprimer cette note ?', 'Delete this note?'],
+    ['Note supprimée', 'Note deleted'], ['Aucune note', 'No notes'], ["Aucune note pour l'instant.", 'No notes yet.'],
+    ['Crée ta première note avec « Nouvelle note ».', 'Create your first note with “New note”.'],
+    ['Choisis une note, ou crée-en une nouvelle.', 'Pick a note, or create a new one.'], ['Afficher : Notes', 'Show: Notes'],
     // --- Interface v2
     ['Réduire le menu (Ctrl+B)', 'Collapse sidebar (Ctrl+B)'], ['Réduire le menu', 'Collapse sidebar'], ['Agrandir le menu', 'Expand sidebar'],
     ['Plus de détails', 'More details'], ['Notes, étapes, étiquettes, fichiers', 'Notes, steps, tags, files'], ['Paramètres (Ctrl+,)', 'Settings (Ctrl+,)'],
@@ -178,7 +185,7 @@
     ['Exporte tes données dans un fichier pour les garder en sécurité ou les retrouver sur un autre ordinateur, puis réimporte-le quand tu veux.', 'Export your data to a file to keep it safe or to move it to another computer, then re-import it whenever you like.'],
     ['Exporter', 'Export'], ['Tous tes devoirs, terminés ou non.', 'All your assignments, done or not.'], ['Exporter les devoirs', 'Export assignments'],
     ['La liste de tes matières et leurs couleurs.', 'Your list of subjects and their colours.'], ['Exporter les matières', 'Export subjects'],
-    ['Réglages', 'Settings'], ['Apparence, préférences et notifications.', 'Appearance, preferences and notifications.'], ['Exporter les réglages', 'Export settings'],
+    ['Réglages', 'Settings'], ['Apparence, préférences et notifications.', 'Appearance, preferences and notifications.'], ['Apparence, préférences, notifications et notes.', 'Appearance, preferences, notifications and notes.'], ['Exporter les réglages', 'Export settings'],
     ['Créer le fichier', 'Create the file'], ["Tu choisis où l'enregistrer.", 'You choose where to save it.'], ['Importer', 'Import'], ['Choisir un fichier', 'Choose a file'],
     ['Une sauvegarde créée par Mes Devoirs.', 'A backup created by My Homework.'], ['Importer les devoirs', 'Import assignments'], ['Importer les matières', 'Import subjects'],
     ['Remplacent tes réglages actuels (thème, notifications…).', 'Replace your current settings (theme, notifications…).'], ['Importer les réglages', 'Import settings'],
@@ -255,6 +262,7 @@
   // Règles pour les phrases qui contiennent des nombres, des dates ou des noms.
   const num = (n, one, many) => `${n} ${Number(n) > 1 ? many : one}`;
   const RULES = [
+    [/^(\d+) notes?$/, (m) => num(m[1], 'note', 'notes')],
     [/^En retard de (\d+) jours$/, (m) => `${m[1]} days late`],
     [/^Prochain devoir créé pour le (.+)$/, (m) => `Next one created for ${m[1]}`],
     [/^Fichier introuvable : (.+)$/, (m) => `File not found: ${m[1]}`],

@@ -98,6 +98,7 @@ const ICONS = {
   sidebar: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
   checks: '<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  note: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
 };
 
 const state = {
@@ -1073,8 +1074,10 @@ function renderView() {
 }
 
 function render() {
+  // Onglet Notes ouvert : c'est lui qui est en surbrillance dans le menu, pas un filtre
+  const inNotes = !!(window.notes && window.notes.isOpen());
   document.querySelectorAll('#filters button').forEach((b) => {
-    b.classList.toggle('active', b.dataset.filter === state.filter);
+    b.classList.toggle('active', !inNotes && b.dataset.filter === state.filter);
   });
   renderCounts();
   if (window.extras) window.extras.counts();
@@ -1696,6 +1699,7 @@ let appReady = false;
 let pendingOpenFilter = null;
 function openFromNotification(filter) {
   document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+  if (window.notes) window.notes.close();
   if (FILTER_LABELS[filter]) state.filter = filter;
   state.subject = null;
   state.search = '';
@@ -1852,6 +1856,7 @@ $('bi-apply').addEventListener('click', async () => {
   saveNow();
   refreshAfterImport();
   if (window.extras) window.extras.dataReplaced();
+  if (window.notes) window.notes.refresh();
 
   const rep = r.report;
   const bits = [];
@@ -2603,6 +2608,8 @@ document.addEventListener('keydown', (e) => {
     document.querySelector(`#filters button[data-filter="${f}"]`).click();
     return;
   }
+  // Onglet Notes ouvert : les raccourcis de la liste des devoirs (flèches, Espace, Suppr…) ne doivent pas agir en cachette
+  if (window.notes && window.notes.isOpen()) return;
   if (e.shiftKey) return;
 
   if (e.key === 'Escape' && selectMode) { setSelectMode(false); return; }
@@ -2803,6 +2810,7 @@ function cmdActions() {
   ];
   [['today', "Aujourd'hui"], ['todo', 'À faire'], ['late', 'En retard'], ['week', 'Cette semaine'], ['done', 'Terminés'], ['all', 'Tous les devoirs']]
     .forEach(([f, l]) => a.push([`Afficher : ${l}`, () => clickIf(`#filters button[data-filter="${f}"]`), 'filtre']));
+  a.push(['Afficher : Notes', () => clickIf('#notesBtn'), 'carnet bloc-notes memo']);
   if (pomo) a.push(['Arrêter le minuteur', stopTimer, 'pomodoro chrono']);
   if (window.extras) a.push(...window.extras.commands());
   return a;
@@ -2886,6 +2894,7 @@ async function init() {
   $('sort').value = state.sort;
   // Langue, modèles, corbeille, archive, verrouillage, widget… (voir extras.js)
   if (window.extras) window.extras.init();
+  if (window.notes) window.notes.init();
   applyTheme();
   render();
   appReady = true;

@@ -9,16 +9,27 @@
 </head>
 <body>
   <header class="bar">
-    <span class="bar-title">📚 Mes Devoirs</span>
+    <span class="bar-title" id="wTitle" data-notr>📚 Mes Devoirs</span>
     <div class="bar-btns">
       <button type="button" id="wNew" title="Nouveau devoir" aria-label="Nouveau devoir">＋</button>
+      <button type="button" id="wCollapse" title="Réduire le widget" aria-label="Réduire le widget" aria-expanded="true">▾</button>
       <button type="button" id="wPin" title="Toujours au premier plan" aria-label="Toujours au premier plan" aria-pressed="true">📌</button>
       <button type="button" id="wOpen" title="Ouvrir Mes Devoirs" aria-label="Ouvrir Mes Devoirs">↗</button>
       <button type="button" id="wClose" title="Fermer le widget" aria-label="Fermer le widget">✕</button>
     </div>
   </header>
+  <section class="prog" id="wProg" hidden>
+    <div class="prog-text" id="wProgText" data-notr></div>
+    <div class="prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="wProgBar"><div class="prog-fill" id="wProgFill"></div></div>
+  </section>
   <main id="wBody" class="body"></main>
+  <form class="add" id="wAddForm" autocomplete="off" hidden>
+    <div class="add-preview" id="wPreview" hidden data-notr></div>
+    <input type="text" id="wAdd" maxlength="160" spellcheck="false" placeholder="Ajouter un devoir…" aria-label="Ajouter un devoir">
+  </form>
+  <div class="toast" id="wToast" role="status" aria-live="polite" hidden data-notr></div>
   <script src="i18n.js"></script>
+  <script src="quickadd.js"></script>
   <script src="widget.js"></script>
 </body>
 </html>

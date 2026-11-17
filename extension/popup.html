@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes Devoirs</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>📚 Mes Devoirs</h1>
+    <span class="status" id="status"><i class="dot" id="dot"></i><span id="stxt">Connexion…</span></span>
+  </header>
+  <section class="counts" id="counts" hidden>
+    <div class="c late"><b id="cLate">0</b><span>en retard</span></div>
+    <div class="c"><b id="cToday">0</b><span>aujourd'hui</span></div>
+    <div class="c"><b id="cTomorrow">0</b><span>demain</span></div>
+  </section>
+  <form id="form" autocomplete="off">
+    <label for="q">Ajout rapide</label>
+    <input id="q" maxlength="200" placeholder="Maths ex 5 p.12 pour vendredi ! 30 min" spellcheck="false" autofocus>
+    <div class="preview" id="preview" hidden></div>
+    <button type="submit" id="go">Ajouter</button>
+  </form>
+  <p class="note" id="note" hidden></p>
+  <section class="opts">
+    <label class="opt"><input type="checkbox" id="oDetect"> <span>Détecter les devoirs sur Pronote / École Directe</span></label>
+    <label class="opt"><input type="checkbox" id="oAuto"> <span>Les ajouter automatiquement, sans confirmation</span></label>
+  </section>
+  <footer>
+    <span>Raccourci sur Pronote / École Directe : <kbd>Alt</kbd>+<kbd>Maj</kbd>+<kbd>D</kbd></span>
+  </footer>
+  <script src="quickadd.js"></script>
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

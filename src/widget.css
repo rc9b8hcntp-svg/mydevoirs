@@ -29,7 +29,6 @@ body { display: flex; flex-direction: column; border: 1px solid var(--border); }
 .row .t { font-weight: 600; word-wrap: break-word; min-width: 0; }
 .row .m { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .row.p3 .t::before { content: "❗ "; }
-.row.gone { opacity: .45; text-decoration: line-through; }
 .empty { text-align: center; color: var(--muted); padding: 28px 10px; }
 .empty .big { font-size: 32px; }
 .locked { text-align: center; padding: 18px 10px; }
@@ -37,3 +36,71 @@ body { display: flex; flex-direction: column; border: 1px solid var(--border); }
 .locked p { margin: 6px 0; color: var(--muted); }
 .locked button { margin-top: 10px; border: 0; background: var(--accent); color: var(--accent-text); border-radius: 9px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
 .compact .row { padding: 4px 8px; }
+
+/* ---- Barre : titre qui se tronque, bouton réduire ---- */
+.bar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-btns { flex-shrink: 0; }
+.bar-btns #wCollapse { transition: transform .2s; }
+.bar-btns #wCollapse[aria-expanded="false"] { transform: rotate(90deg); }
+
+/* ---- Progression du jour ---- */
+.prog { padding: 8px 12px 9px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.prog-text { font-size: 11.5px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 5px; }
+.prog-text b { color: var(--text); font-weight: 700; }
+.prog-track { height: 6px; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
+.prog-fill { height: 100%; width: 0; border-radius: 99px; background: var(--accent); transition: width .45s cubic-bezier(.3,.8,.3,1); }
+.prog.all .prog-fill { background: #22a06b; }
+
+/* ---- Sections repliables ---- */
+.sec { cursor: pointer; user-select: none; border-radius: 6px; padding: 2px 2px; margin-left: -2px; margin-right: -2px; }
+.sec:hover { background: var(--border); }
+.sec::before { content: "▾"; font-size: 9px; transition: transform .15s; display: inline-block; width: 8px; }
+.sec.shut::before { transform: rotate(-90deg); }
+.sec .n { background: var(--panel); border: 1px solid var(--border); border-radius: 99px; padding: 0 7px; font-size: 10px; line-height: 16px; }
+.sec.late .n { border-color: var(--danger); }
+
+/* ---- Lignes (ce n'est plus un <label> : seule la case coche) ---- */
+.row { flex-wrap: wrap; align-items: flex-start; }
+.row .main { flex: 1; min-width: 0; }
+.row .main.tog { cursor: pointer; }
+.row .m.late { color: var(--danger); font-weight: 600; }
+.row .chev { border: 0; background: none; color: var(--muted); font-size: 11px; width: 20px; height: 20px; border-radius: 6px; cursor: pointer; padding: 0; flex-shrink: 0; transition: transform .15s; }
+.row .chev:hover { background: var(--bg); color: var(--text); }
+.row .chev[aria-expanded="true"] { transform: rotate(90deg); }
+.row.gone { opacity: .4; transform: translateX(6px); transition: opacity .25s, transform .25s; }
+.row.gone .t { text-decoration: line-through; }
+.row .subs { flex-basis: 100%; margin: 2px 0 2px 25px; padding-left: 8px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
+.row .sub { display: flex; align-items: flex-start; gap: 7px; font-size: 12.5px; cursor: pointer; }
+.row .sub input { width: 14px; height: 14px; margin-top: 2px; }
+.row .sub.done span { color: var(--muted); text-decoration: line-through; }
+.mini-bar { height: 3px; border-radius: 99px; background: var(--bg); margin-top: 4px; overflow: hidden; }
+.mini-bar > i { display: block; height: 100%; background: var(--accent); }
+
+/* ---- Ajout rapide ---- */
+.add { padding: 8px 10px 10px; background: var(--panel); border-top: 1px solid var(--border); }
+.add input { width: 100%; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 10px; padding: 8px 11px; font: inherit; font-size: 13px; outline: none; }
+.add input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.add input::placeholder { color: var(--muted); }
+.add input.shake { animation: shake .25s; }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.add-preview { font-size: 11.5px; color: var(--muted); margin: 0 2px 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.add-preview .pt { color: var(--text); font-weight: 600; margin-right: 2px; }
+.add-preview .chip { background: var(--bg); border: 1px solid var(--border); border-radius: 99px; padding: 0 7px; line-height: 17px; }
+.add-preview .chip.c { border-left: 3px solid var(--c); }
+
+/* ---- Message avec « Annuler » ---- */
+.toast { position: fixed; left: 10px; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; background: var(--text); color: var(--bg); border-radius: 10px; font-size: 12.5px; box-shadow: 0 6px 20px rgba(0,0,0,.25); animation: pop .18s ease-out; z-index: 5; }
+.toast span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast button { border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 2px 6px; font-size: 12.5px; }
+@keyframes pop { from { opacity: 0; transform: translateY(6px); } }
+
+/* ---- Réduit : seule la barre reste ---- */
+body.min .prog, body.min .body, body.min .add { display: none; }
+body.min .bar { border-bottom: 0; height: 100%; }
+body.min .bar-btns #wNew, body.min .bar-btns #wOpen { display: none; }
+body.min .toast { display: none; }
+.bar-title .pill { font-weight: 600; color: var(--muted); font-size: 12px; }
+.bar-title .pill.late { color: var(--danger); }
+.bar-title .pill.ok { color: #22a06b; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

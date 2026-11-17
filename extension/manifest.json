@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Mes Devoirs – Ajouter",
-  "version": "1.0.0",
-  "description": "Ajoute un devoir à l'appli Mes Devoirs en un clic depuis Pronote ou École Directe.",
+  "version": "1.2.0",
+  "description": "Détecte automatiquement les devoirs sur Pronote et École Directe et les ajoute à Mes Devoirs en un clic (matière, date, priorité reconnues).",
   "icons": {
     "16": "icons/16.png",
     "48": "icons/48.png",
@@ -17,6 +17,9 @@
         "https://*/*/pronote/*"
       ],
       "js": [
+        "quickadd.js",
+        "shared.js",
+        "detect.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -27,5 +30,25 @@
   },
   "host_permissions": [
     "http://127.0.0.1:47653/*"
-  ]
+  ],
+  "permissions": [
+    "contextMenus",
+    "storage"
+  ],
+  "action": {
+    "default_title": "Mes Devoirs",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png"
+    }
+  },
+  "commands": {
+    "toggle-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "Ouvrir / fermer le panneau d'ajout sur la page"
+    }
+  }
 }

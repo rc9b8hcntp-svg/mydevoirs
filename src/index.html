@@ -18,14 +18,19 @@
 
       <button class="primary big" id="newBtn" title="Nouveau devoir (Ctrl+N)"><span class="ico" data-icon="plus"></span>Nouveau devoir</button>
 
-      <nav class="filters" id="filters">
-        <button data-filter="today"><span class="ico" data-icon="sun"></span><span class="lbl">Aujourd'hui</span><span class="count" id="c-today">0</span></button>
-        <button data-filter="todo" class="active"><span class="ico" data-icon="circle"></span><span class="lbl">À faire</span><span class="count" id="c-todo">0</span></button>
-        <button data-filter="late"><span class="ico" data-icon="alert"></span><span class="lbl">En retard</span><span class="count" id="c-late">0</span></button>
-        <button data-filter="week"><span class="ico" data-icon="calendar"></span><span class="lbl">Cette semaine</span><span class="count" id="c-week">0</span></button>
-        <button data-filter="done"><span class="ico" data-icon="check"></span><span class="lbl">Terminés</span><span class="count" id="c-done">0</span></button>
-        <button data-filter="all"><span class="ico" data-icon="layers"></span><span class="lbl">Tous</span><span class="count" id="c-all">0</span></button>
-      </nav>
+      <div class="nav-group">
+        <nav class="filters" id="filters">
+          <button data-filter="today"><span class="ico" data-icon="sun"></span><span class="lbl">Aujourd'hui</span><span class="count" id="c-today">0</span></button>
+          <button data-filter="todo" class="active"><span class="ico" data-icon="circle"></span><span class="lbl">À faire</span><span class="count" id="c-todo">0</span></button>
+          <button data-filter="late"><span class="ico" data-icon="alert"></span><span class="lbl">En retard</span><span class="count" id="c-late">0</span></button>
+          <button data-filter="week"><span class="ico" data-icon="calendar"></span><span class="lbl">Cette semaine</span><span class="count" id="c-week">0</span></button>
+          <button data-filter="done"><span class="ico" data-icon="check"></span><span class="lbl">Terminés</span><span class="count" id="c-done">0</span></button>
+          <button data-filter="all"><span class="ico" data-icon="layers"></span><span class="lbl">Tous</span><span class="count" id="c-all">0</span></button>
+        </nav>
+        <nav class="filters" id="notesNav">
+          <button type="button" id="notesBtn" title="Notes"><span class="ico" data-icon="note"></span><span class="lbl">Notes</span><span class="count" id="c-notes">0</span></button>
+        </nav>
+      </div>
 
       <div class="side-block">
         <div class="side-head">
@@ -118,6 +123,45 @@
         <div class="empty-emoji">🎉</div>
         <p id="emptyText">Rien à afficher ici.</p>
       </div>
+
+      <!-- Onglet Notes : carnet de notes libres (remplace le reste de la page quand il est ouvert) -->
+      <section id="notesPage" class="notes-page" hidden>
+        <header class="page-head">
+          <div>
+            <h2>Notes</h2>
+            <p class="notes-sub" id="notesSub"></p>
+          </div>
+          <div class="head-actions">
+            <button type="button" class="primary" id="noteNew" title="Nouvelle note"><span class="ico" data-icon="plus"></span>Nouvelle note</button>
+          </div>
+        </header>
+
+        <div class="notes-layout">
+          <aside class="notes-side">
+            <div class="search-box">
+              <span class="ico" data-icon="search"></span>
+              <input type="search" id="noteSearch" placeholder="Rechercher une note…" autocomplete="off" aria-label="Rechercher une note">
+            </div>
+            <ul id="noteList" class="note-list"></ul>
+          </aside>
+
+          <section class="note-editor">
+            <div class="note-empty" id="noteEmpty">
+              <span class="ico" data-icon="note"></span>
+              <p class="ne-title" id="noteEmptyTitle"></p>
+              <p class="ne-hint" id="noteEmptyHint"></p>
+            </div>
+            <div class="note-form" id="noteForm" hidden>
+              <input type="text" id="noteTitle" class="note-title" maxlength="120" placeholder="Titre" autocomplete="off" aria-label="Titre de la note">
+              <textarea id="noteBody" class="note-body" maxlength="20000" placeholder="Écris ta note ici…" aria-label="Contenu de la note"></textarea>
+              <div class="note-foot">
+                <span class="note-when" id="noteWhen"></span>
+                <button type="button" class="ghost small note-del" id="noteDel" title="Supprimer cette note"><span class="ico" data-icon="trash"></span>Supprimer</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -680,7 +724,7 @@
               <input type="checkbox" class="switch" id="bx-subjects" checked aria-label="Exporter les matières">
             </div>
             <div class="setting">
-              <div class="desc">Réglages<small>Apparence, préférences et notifications.</small></div>
+              <div class="desc">Réglages<small>Apparence, préférences, notifications et notes.</small></div>
               <input type="checkbox" class="switch" id="bx-settings" checked aria-label="Exporter les réglages">
             </div>
             <div class="setting">
@@ -781,6 +825,7 @@
   <script src="renderer.js"></script>
   <script src="dashboard.js"></script>
   <script src="extras.js"></script>
+  <script src="notes.js"></script>
   <script src="ui.js"></script>
 </body>
 </html>

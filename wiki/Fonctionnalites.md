@@ -20,7 +20,7 @@ Des matières prédéfinies avec une couleur chacune (Maths, Français, Histoire
 - Vue **liste** ou **calendrier**, par mois ou par semaine (du lundi au vendredi). Les devoirs prennent la couleur de leur matière, et un clic sur un jour permet d'en ajouter un.
 - Page d'accueil avec un anneau de progression de la semaine.
 - Thème clair, sombre ou automatique, et huit couleurs principales.
-- **Mini-widget** toujours visible (en retard, aujourd'hui, demain, avec des cases à cocher), épinglable au-dessus des autres fenêtres.
+- **Mini-widget** toujours visible (en retard, aujourd'hui, demain, avec des cases à cocher et les sous-tâches), avec une barre de progression du jour, un champ d'ajout rapide (« Maths ex 5 vendredi ! »), un bouton « Annuler » après avoir coché, des sections repliables et un mode réduit. Épinglable au-dessus des autres fenêtres.
 
 ## Ajout rapide
 

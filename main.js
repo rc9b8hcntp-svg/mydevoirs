@@ -365,11 +365,14 @@ function handleAction({ action, id, fields }) {
   try {
     const data = readData();
     if (action === 'add' && fields) {
+      // L'extension détecte les devoirs automatiquement : on n'ajoute pas deux fois le même (même titre, même jour, pas encore fait)
+      const key = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (data.homework.some((h) => h && !h.done && key(h.title) === key(fields.title) && (h.date || '') === (fields.date || ''))) return;
       const pr = Number(data.settings && data.settings.defaultPriority) || 1;
       data.homework.push({
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), done: false, created: Date.now(), updatedAt: Date.now(),
-        title: fields.title, subject: fields.subject, date: fields.date, priority: pr, notes: fields.notes,
-        kind: '', minutes: 0, repeat: '', tags: [], subtasks: [], attachments: [], grade: null, gradeMax: null, coef: null,
+        title: fields.title, subject: fields.subject, date: fields.date, priority: fields.priority || pr, notes: fields.notes,
+        kind: fields.kind || '', minutes: fields.minutes || 0, repeat: '', tags: fields.tags || [], subtasks: [], attachments: [], grade: null, gradeMax: null, coef: null,
       });
       commit(data);
       try { new Notification({ title: 'Mes Devoirs', body: 'Ajouté : ' + fields.title, silent: true }).show(); } catch (e) { /* ignoré */ }
@@ -390,6 +393,10 @@ function handleAction({ action, id, fields }) {
 
 // ---------- Mini-widget (petite fenêtre toujours visible) ----------
 let widgetWin = null;
+let widgetCollapsed = false;
+const WIDGET_MIN_W = 250;
+const WIDGET_MIN_H = 160;
+const WIDGET_COLLAPSED_H = 46;
 const widgetStateFile = () => path.join(app.getPath('userData'), 'widget-state.json');
 function readWidgetState() {
   try { const s = JSON.parse(fs.readFileSync(widgetStateFile(), 'utf8')); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; }
@@ -411,16 +418,19 @@ function createWidget() {
   const st = readWidgetState();
   const b = widgetBoundsOk(st.bounds) ? st.bounds : null;
   const area = screen.getPrimaryDisplay().workArea;
-  const size = { width: 300, height: 420 };
+  const size = { width: 320, height: 460 };
+  widgetCollapsed = st.collapsed === true;
   const win = new BrowserWindow({
-    width: b ? b.width : size.width,
-    height: b ? b.height : size.height,
+    width: b ? Math.max(b.width, WIDGET_MIN_W) : size.width,
+    height: widgetCollapsed ? WIDGET_COLLAPSED_H : (b ? b.height : size.height),
     x: b ? b.x : area.x + area.width - size.width - 24,
     y: b ? b.y : area.y + 24,
-    minWidth: 230,
-    minHeight: 160,
+    minWidth: WIDGET_MIN_W,
+    minHeight: widgetCollapsed ? WIDGET_COLLAPSED_H : WIDGET_MIN_H,
     frame: false,
     resizable: true,
+    maximizable: false,
+    fullscreenable: false,
     skipTaskbar: true,
     alwaysOnTop: st.pinned !== false,
     show: false,
@@ -435,7 +445,16 @@ function createWidget() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   let t = null;
-  const saveBounds = () => { clearTimeout(t); t = setTimeout(() => { if (!win.isDestroyed()) writeWidgetState({ bounds: win.getBounds() }); }, 400); };
+  const saveBounds = () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      if (win.isDestroyed()) return;
+      const bb = win.getBounds();
+      // Réduit : on garde en mémoire la hauteur d'origine pour la retrouver à l'agrandissement
+      if (widgetCollapsed) writeWidgetState({ bounds: Object.assign({}, bb, { height: readWidgetState().fullHeight || size.height }) });
+      else writeWidgetState({ bounds: bb, fullHeight: bb.height });
+    }, 400);
+  };
   win.on('moved', saveBounds);
   win.on('resized', saveBounds);
   win.on('closed', () => { clearTimeout(t); widgetWin = null; });
@@ -468,6 +487,11 @@ function widgetPayload() {
     accent: s.accent || 'indigo',
     compact: !!s.compact,
     pinned: readWidgetState().pinned !== false,
+    collapsed: widgetCollapsed,
+    today: {
+      total: d.homework.filter((h) => h && h.title && h.date && days(h) === 0).length,
+      done: d.homework.filter((h) => h && h.title && h.date && days(h) === 0 && h.done).length,
+    },
     counts: {
       late: open.filter((h) => days(h) !== null && days(h) < 0).length,
       today: open.filter((h) => days(h) === 0).length,
@@ -480,6 +504,7 @@ function widgetPayload() {
     items: open.filter((h) => days(h) !== null && days(h) <= 1).slice(0, 60).map((h) => ({
       id: h.id, title: String(h.title).slice(0, 200), subject: h.subject || '', date: h.date, priority: h.priority || 1, kind: h.kind || '', minutes: h.minutes || 0,
       subtasks: (h.subtasks || []).length, subtasksDone: (h.subtasks || []).filter((x) => x.done).length,
+      subtaskList: (h.subtasks || []).slice(0, 30).map((x) => ({ id: String(x.id), text: String(x.text || '').slice(0, 120), done: !!x.done })),
     })),
   });
 }
@@ -489,6 +514,63 @@ ipcMain.handle('widget:done', (_e, id, done) => {
   const data = readData();
   if (markDone(data, String(id), !!done)) commit(data);
   return true;
+});
+ipcMain.handle('widget:subtask', (_e, id, subId, done) => {
+  const data = readData();
+  const h = data.homework.find((x) => x && x.id === String(id));
+  const st = h && (h.subtasks || []).find((x) => String(x.id) === String(subId));
+  if (!st || !!st.done === !!done) return false;
+  st.done = !!done;
+  h.updatedAt = Date.now();
+  commit(data);
+  return true;
+});
+// Ajout rapide depuis le widget : les champs sont vérifiés ici, le widget n'est pas de confiance
+ipcMain.handle('widget:add', (_e, input) => {
+  const i = input && typeof input === 'object' ? input : {};
+  const title = String(i.title || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (!title) return { ok: false };
+  const data = readData();
+  if (data.settings.lock && data.settings.lock.hash) return { ok: false, locked: true };
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(i.date || '')) ? String(i.date) : today;
+  const prio = Number(i.priority);
+  const priority = prio >= 1 && prio <= 3 ? prio : (Number(data.settings.defaultPriority) || 1);
+  const minutes = Math.min(1440, Math.max(0, Math.round(Number(i.minutes) || 0)));
+  const hw = {
+    id: require('crypto').randomBytes(8).toString('hex'), done: false, created: Date.now(), updatedAt: Date.now(),
+    title, subject: String(i.subject || '').slice(0, 60), date, priority, notes: '',
+    kind: String(i.kind || '').slice(0, 20), minutes, repeat: '',
+    tags: (Array.isArray(i.tags) ? i.tags : []).slice(0, 10).map((t) => String(t).slice(0, 30)),
+    subtasks: [], attachments: [], grade: null, gradeMax: null, coef: null,
+  };
+  data.homework.push(hw);
+  commit(data);
+  return { ok: true, title, date };
+});
+// Réduit le widget à sa barre de titre (et le rétablit)
+ipcMain.handle('widget:collapse', (_e, force) => {
+  if (!widgetWin || widgetWin.isDestroyed()) return false;
+  const want = typeof force === 'boolean' ? force : !widgetCollapsed;
+  if (want === widgetCollapsed) return widgetCollapsed;
+  const bb = widgetWin.getBounds();
+  if (want) {
+    writeWidgetState({ collapsed: true, fullHeight: bb.height });
+    widgetCollapsed = true;
+    widgetWin.setMinimumSize(WIDGET_MIN_W, WIDGET_COLLAPSED_H);
+    widgetWin.setBounds({ x: bb.x, y: bb.y, width: bb.width, height: WIDGET_COLLAPSED_H });
+  } else {
+    const full = Math.max(WIDGET_MIN_H, readWidgetState().fullHeight || 460);
+    const area = screen.getDisplayMatching(bb).workArea;
+    const y = Math.max(area.y, Math.min(bb.y, area.y + area.height - Math.min(full, area.height)));
+    widgetCollapsed = false;
+    writeWidgetState({ collapsed: false });
+    widgetWin.setMinimumSize(WIDGET_MIN_W, WIDGET_MIN_H);
+    widgetWin.setBounds({ x: bb.x, y, width: bb.width, height: Math.min(full, area.height) });
+  }
+  return widgetCollapsed;
 });
 ipcMain.handle('widget:open', () => { showWindow(); return true; });
 ipcMain.handle('widget:new', () => {
@@ -784,13 +866,31 @@ function startExtensionServer() {
     if (origin) { headers['Access-Control-Allow-Origin'] = origin; headers['Access-Control-Allow-Headers'] = 'Content-Type'; }
     if (req.method === 'OPTIONS') { res.writeHead(204, headers); res.end(); return; }
     if (req.method === 'GET' && req.url === '/ping') { res.writeHead(200, headers); res.end('{"ok":true,"app":"mes-devoirs"}'); return; }
+    // Infos pour l'extension : version, matières (pour la liste déroulante) et compteurs du jour
+    if (req.method === 'GET' && req.url === '/info') {
+      const d = readData();
+      const now = new Date();
+      const open = d.homework.filter((h) => h && !h.done && h.title && h.date);
+      const n = (fn) => open.filter((h) => fn(daysUntil(h.date, now))).length;
+      res.writeHead(200, headers);
+      res.end(JSON.stringify({
+        ok: true, app: 'mes-devoirs', version: app.getVersion(),
+        subjects: (d.settings.subjects || []).map((x) => ({ name: String(x.name), color: x.color })),
+        counts: { late: n((x) => x < 0), today: n((x) => x === 0), tomorrow: n((x) => x === 1) },
+      }));
+      return;
+    }
     if (req.method === 'POST' && req.url === '/add') {
       let body = '';
       req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
       req.on('end', () => {
         try {
           const f = JSON.parse(body);
-          const a = parseActionUrl('mesdevoirs://add?' + new URLSearchParams({ title: f.title || '', subject: f.subject || '', date: f.date || '', notes: f.notes || '' }));
+          const a = parseActionUrl('mesdevoirs://add?' + new URLSearchParams({
+            title: String(f.title || ''), subject: String(f.subject || ''), date: String(f.date || ''), notes: String(f.notes || ''),
+            priority: String(f.priority || ''), minutes: String(f.minutes || ''), kind: String(f.kind || ''),
+            tags: Array.isArray(f.tags) ? f.tags.map((t) => String(t).replace(/,/g, ' ')).join(',') : '',
+          }));
           if (!a) { res.writeHead(400, headers); res.end('{"ok":false}'); return; }
           handleAction(a);
           res.writeHead(200, headers); res.end('{"ok":true}');

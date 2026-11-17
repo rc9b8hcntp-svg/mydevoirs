@@ -211,7 +211,14 @@ function parseActionUrl(arg) {
       const title = String(q.get('title') || '').trim().slice(0, 120);
       if (!title) return null;
       const date = /^\d{4}-\d{2}-\d{2}$/.test(q.get('date') || '') ? q.get('date') : '';
-      return { action: 'add', fields: { title, subject: String(q.get('subject') || '').trim().slice(0, 60), date, notes: String(q.get('notes') || '').trim().slice(0, 2000) } };
+      const prio = Number(q.get('priority'));
+      const kind = ['controle', 'expose'].includes(q.get('kind')) ? q.get('kind') : '';
+      return { action: 'add', fields: {
+        title, subject: String(q.get('subject') || '').trim().slice(0, 60), date, notes: String(q.get('notes') || '').trim().slice(0, 2000),
+        priority: prio >= 1 && prio <= 3 ? prio : 0, kind,
+        minutes: Math.min(1440, Math.max(0, Math.round(Number(q.get('minutes')) || 0))),
+        tags: String(q.get('tags') || '').split(',').map((t) => t.trim().slice(0, 30)).filter(Boolean).slice(0, 10),
+      } };
     } catch (e) { return null; }
   }
   const m = /^mesdevoirs:\/\/(done|snooze)\/([^/?#\s]+)\/?$/i.exec(String(arg || ''));

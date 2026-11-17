@@ -10,6 +10,7 @@ const FORMAT = 1;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_HOMEWORK = 20000;
 const MAX_SUBJECTS = 200;
+const MAX_NOTES = 1000;
 
 const THEMES = ['light', 'dark', 'auto', 'time'];
 const ACCENTS = ['indigo', 'violet', 'rose', 'rouge', 'orange', 'vert', 'turquoise', 'bleu'];
@@ -160,6 +161,26 @@ function sanitizeTemplates(list) {
   return out;
 }
 
+// Notes libres (onglet Notes) : titre + texte
+function sanitizeNotes(list) {
+  const out = [];
+  const ids = new Set();
+  (Array.isArray(list) ? list : []).slice(0, MAX_NOTES).forEach((n) => {
+    if (!n || typeof n !== 'object') return;
+    const title = str(n.title, 120);
+    const text = typeof n.text === 'string' ? n.text.slice(0, 20000) : '';
+    if (!title && !text.trim()) return;
+    let id = str(n.id, 64);
+    if (!id || ids.has(id)) id = uid();
+    ids.add(id);
+    const c = num(n.created);
+    const created = c !== null && c > 0 ? c : Date.now();
+    const m = num(n.modified);
+    out.push({ id, title, text, created, modified: m !== null && m > 0 ? m : created });
+  });
+  return out;
+}
+
 // Réglages qu'on accepte d'importer. Volontairement absents : le dépôt de mises à jour et le tag de version
 // (un fichier piégé pourrait sinon pointer vers un autre dépôt et faire installer un programme étranger).
 function sanitizeSettings(raw) {
@@ -178,6 +199,7 @@ function sanitizeSettings(raw) {
   if (s.language === 'fr' || s.language === 'en') out.language = s.language;
   if ([0, 3, 6, 12, 24].includes(Number(s.archiveMonths))) out.archiveMonths = Number(s.archiveMonths);
   if (Array.isArray(s.templates)) out.templates = sanitizeTemplates(s.templates);
+  if (Array.isArray(s.notes)) out.notes = sanitizeNotes(s.notes);
   if (s.notifications && typeof s.notifications === 'object') out.notifications = normalizeSettings(s.notifications);
   return out;
 }
@@ -305,9 +327,23 @@ function applyImport(current, data, options) {
   }
 
   if (o.settings && data.settings) {
-    const { notifications, ...rest } = data.settings;
+    const { notifications, notes, ...rest } = data.settings;
     Object.assign(cur.settings, rest);
     if (notifications) cur.settings.notifications = notifications;
+    // Les notes ne sont jamais remplacées : celles du fichier s'ajoutent aux tiennes (la plus récente gagne si c'est la même note)
+    if (notes) {
+      const mine = Array.isArray(cur.settings.notes) ? cur.settings.notes.slice() : [];
+      const sigOf = (n) => `${key(n.title)}\u0001${n.text}`;
+      const sigs = new Set(mine.map(sigOf));
+      notes.forEach((n) => {
+        const i = mine.findIndex((x) => x.id === n.id);
+        if (i >= 0) { if ((n.modified || 0) > (mine[i].modified || 0)) mine[i] = n; return; }
+        if (sigs.has(sigOf(n))) return;
+        sigs.add(sigOf(n));
+        mine.push(n);
+      });
+      cur.settings.notes = mine;
+    }
     report.settingsApplied = Object.keys(data.settings).length > 0;
   }
 
@@ -316,6 +352,6 @@ function applyImport(current, data, options) {
 
 module.exports = {
   APP_ID, FORMAT, MAX_FILE_BYTES,
-  sanitizeHomework, sanitizeSubjects, sanitizeSettings, sanitizeTemplates,
+  sanitizeHomework, sanitizeSubjects, sanitizeSettings, sanitizeTemplates, sanitizeNotes,
   buildBackup, defaultFileName, parseBackup, applyImport,
 };
