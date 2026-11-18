@@ -98,6 +98,7 @@ const ICONS = {
   sidebar: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
   checks: '<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   note: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
 };
 
@@ -1075,7 +1076,7 @@ function renderView() {
 
 function render() {
   // Onglet Notes ouvert : c'est lui qui est en surbrillance dans le menu, pas un filtre
-  const inNotes = !!(window.notes && window.notes.isOpen());
+  const inNotes = !!((window.notes && window.notes.isOpen()) || (window.grades && window.grades.isOpen()));
   document.querySelectorAll('#filters button').forEach((b) => {
     b.classList.toggle('active', !inNotes && b.dataset.filter === state.filter);
   });
@@ -1083,6 +1084,7 @@ function render() {
   if (window.extras) window.extras.counts();
   renderSubjects();
   renderView();
+  if (window.grades) window.grades.render();
 }
 
 // ---------- Thème ----------
@@ -1700,6 +1702,7 @@ let pendingOpenFilter = null;
 function openFromNotification(filter) {
   document.querySelectorAll('dialog[open]').forEach((d) => d.close());
   if (window.notes) window.notes.close();
+  if (window.grades) window.grades.close();
   if (FILTER_LABELS[filter]) state.filter = filter;
   state.subject = null;
   state.search = '';
@@ -1857,6 +1860,7 @@ $('bi-apply').addEventListener('click', async () => {
   refreshAfterImport();
   if (window.extras) window.extras.dataReplaced();
   if (window.notes) window.notes.refresh();
+  if (window.grades) window.grades.refresh();
 
   const rep = r.report;
   const bits = [];
@@ -2219,18 +2223,19 @@ function weekStats(n) {
 // Moyennes sur 20, pondérées par les coefficients, par matière
 function gradeStats() {
   const by = new Map();
-  statsPool().forEach((h) => {
-    if (typeof h.grade !== 'number') return;
-    const max = h.gradeMax > 0 ? h.gradeMax : 20;
-    const coef = h.coef > 0 ? h.coef : 1;
-    const name = (h.subject || '').trim();
+  const add = (subject, grade, max, coefRaw) => {
+    const coef = coefRaw > 0 ? coefRaw : 1;
+    const name = (subject || '').trim();
     const k = name.toLowerCase();
     if (!by.has(k)) by.set(k, { name, sum: 0, coef: 0, n: 0 });
     const r = by.get(k);
-    r.sum += (h.grade / max) * 20 * coef;
+    r.sum += (grade / (max > 0 ? max : 20)) * 20 * coef;
     r.coef += coef;
     r.n++;
-  });
+  };
+  statsPool().forEach((h) => { if (typeof h.grade === 'number') add(h.subject, h.grade, h.gradeMax, h.coef); });
+  // notes saisies dans l'onglet « Notes /20 »
+  (Array.isArray(state.settings.grades) ? state.settings.grades : []).forEach((g) => { if (g && typeof g.grade === 'number') add(g.subject, g.grade, g.max, g.coef); });
   const rows = [...by.values()].map((r) => ({ name: r.name, n: r.n, avg: r.sum / r.coef })).sort((a, b) => b.avg - a.avg);
   const general = rows.length ? rows.reduce((sum, r) => sum + r.avg, 0) / rows.length : null;
   return { rows, general };
@@ -2609,7 +2614,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   // Onglet Notes ouvert : les raccourcis de la liste des devoirs (flèches, Espace, Suppr…) ne doivent pas agir en cachette
-  if (window.notes && window.notes.isOpen()) return;
+  if ((window.notes && window.notes.isOpen()) || (window.grades && window.grades.isOpen())) return;
   if (e.shiftKey) return;
 
   if (e.key === 'Escape' && selectMode) { setSelectMode(false); return; }
@@ -2811,6 +2816,8 @@ function cmdActions() {
   [['today', "Aujourd'hui"], ['todo', 'À faire'], ['late', 'En retard'], ['week', 'Cette semaine'], ['done', 'Terminés'], ['all', 'Tous les devoirs']]
     .forEach(([f, l]) => a.push([`Afficher : ${l}`, () => clickIf(`#filters button[data-filter="${f}"]`), 'filtre']));
   a.push(['Afficher : Notes', () => clickIf('#notesBtn'), 'carnet bloc-notes memo']);
+  a.push(['Afficher : Notes /20 et moyennes', () => clickIf('#gradesBtn'), 'notes moyenne bulletin resultats']);
+  a.push(['Ajouter une note /20', () => { if (window.grades) window.grades.add(); }, 'note moyenne controle resultat']);
   if (pomo) a.push(['Arrêter le minuteur', stopTimer, 'pomodoro chrono']);
   if (window.extras) a.push(...window.extras.commands());
   return a;
@@ -2895,6 +2902,7 @@ async function init() {
   // Langue, modèles, corbeille, archive, verrouillage, widget… (voir extras.js)
   if (window.extras) window.extras.init();
   if (window.notes) window.notes.init();
+  if (window.grades) window.grades.init();
   applyTheme();
   render();
   appReady = true;

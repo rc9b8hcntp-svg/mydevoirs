@@ -24,6 +24,7 @@ Un petit logiciel pour noter ses devoirs, pour Windows et Mac.
 - **Corbeille** (30 jours, avec restauration) : supprimer un devoir ne le perd plus ; Ctrl+Z reste disponible
 - **Archive automatique** des devoirs terminés depuis plus de N mois (Paramètres → Organisation), consultable et restaurable ; les statistiques les comptent toujours
 - **Import d'emploi du temps** depuis un fichier CSV, TXT, ICS ou JSON (Paramètres → Matières / Emploi du temps)
+- **Onglet « Notes /20 »** : saisis tes notes (barème libre, ramené sur 20, coefficient, date, commentaire), vois la moyenne de chaque matière, ta moyenne générale, la meilleure matière, celle à améliorer et la courbe d'évolution. Les notes de tes contrôles et exposés y apparaissent aussi, et tout est repris dans les Statistiques et les sauvegardes
 - **Mini-widget** toujours visible (en retard / aujourd'hui / demain, cases à cocher, sous-tâches, barre de progression du jour, ajout rapide en une phrase, bouton « Annuler », sections repliables, mode réduit), épinglable au-dessus des autres fenêtres, ouvrable depuis la zone de notification
 - **Synchronisation entre ordinateurs** via un dossier partagé (OneDrive, Dropbox, clé USB…) : le fichier `MesDevoirs-synchro.json` est fusionné, la modification la plus récente gagne
 - **Code de verrouillage** (verrouillage automatique après inactivité, `Ctrl+L`). Attention : il masque l'appli mais ne chiffre pas `devoirs.json`

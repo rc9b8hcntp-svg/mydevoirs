@@ -11,6 +11,21 @@
   // [français, anglais]
   const PAIRS = [
     // --- Onglet Notes
+    // --- Onglet Notes /20
+    ['Notes /20', 'Grades /20'], ['Notes /20 et moyennes', 'Grades /20 and averages'], ['Moyenne générale', 'Overall average'],
+    ['Ajouter une note', 'Add a grade'], ['Modifier la note', 'Edit grade'], ['Modifier le devoir', 'Edit assignment'],
+    ['Aucune note', 'No grades'], ['Meilleure matière', 'Best subject'], ['À améliorer', 'To improve'], ['Dernière note', 'Latest grade'],
+    ['Moyenne des matières', 'Average of the subjects'], ['Évolution des notes', 'Grade trend'], ['Évolution de tes notes sur 20', 'Your grades out of 20 over time'],
+    ['Sans matière', 'No subject'], ['Devoir', 'Assignment'], ['Note', 'Grade'], ['Sans titre', 'Untitled'], ['— Aucune —', '— None —'],
+    ["Aucune note pour l'instant.", 'No grades yet.'],
+    ['Ajoute ta première note : la moyenne de chaque matière et ta moyenne générale se calculent toutes seules. Les notes de tes contrôles et exposés apparaissent ici aussi.',
+      'Add your first grade: each subject average and your overall average are calculated for you. Grades from your tests and presentations show up here too.'],
+    ['Ex : DS chapitre 3', 'E.g. Chapter 3 test'], ['Pas sur 20 ? Mets le barème (ex : 7 sur 10) : la note est ramenée sur 20 automatiquement.', 'Not out of 20? Enter the scale (e.g. 7 out of 10): the grade is converted to /20 automatically.'],
+    ['Appréciation du prof, points à revoir…', "Teacher's comment, points to review…"], ['Commentaire', 'Comment'], ['Coefficient', 'Weight'],
+    ['Note ajoutée', 'Grade added'], ['Note modifiée', 'Grade updated'], ['Note supprimée', 'Grade deleted'],
+    ['Entre la note obtenue (un nombre positif).', 'Enter the grade received (a positive number).'], ['La note maximale doit être supérieure à 0.', 'The maximum grade must be above 0.'],
+    ['Le coefficient doit être supérieur à 0.', 'The weight must be above 0.'],
+    ['Afficher : Notes /20 et moyennes', 'Show: Grades /20 and averages'], ['Ajouter une note /20', 'Add a grade /20'],
     ['Nouvelle note', 'New note'], ['Rechercher une note…', 'Search notes…'], ['Titre de la note', 'Note title'],
     ['Écris ta note ici…', 'Write your note here…'], ['Contenu de la note', 'Note content'], ['Sans titre', 'Untitled'],
     ['Note vide', 'Empty note'], ['Modifiée', 'Edited'], ['Supprimer cette note', 'Delete this note'], ['Supprimer cette note ?', 'Delete this note?'],
@@ -296,6 +311,10 @@
     [/^(\d+) % · (\d+)\/(\d+)$/, (m) => `${m[1]}% · ${m[2]}/${m[3]}`],
     [/^(\d+) sur (\d+) devoirs terminés à temps$/, (m) => `${m[1]} of ${m[2]} completed assignments handed in on time`],
     [/^(.+)\/20 · (\d+) notes?$/, (m) => `${m[1]}/20 · ${num(m[2], 'grade', 'grades')}`],
+    [/^(\d+) notes? · (\d+) matières?$/, (m) => `${num(m[1], 'grade', 'grades')} · ${num(m[2], 'subject', 'subjects')}`],
+    [/^coef (.+)$/, (m) => `weight ${m[1]}`],
+    [/^La note ne peut pas dépasser (.+) \(sur (.+) avec un éventuel bonus\)\.$/, (m) => `The grade cannot exceed ${m[1]} (out of ${m[2]} with possible bonus).`],
+    [/^Supprimer « (.+) » \?$/, (m) => `Delete “${m[1]}”?`],
     [/^Sem\. du (.+)$/, (m) => `Week of ${m[1]}`],
     [/^(\d+) devoirs? : (\d+) à temps, (\d+) rendus? en retard, (\d+) non rendus?, (\d+) à venir$/, (m) => `${num(m[1], 'assignment', 'assignments')}: ${m[2]} on time, ${m[3]} late, ${m[4]} not handed in, ${m[5]} upcoming`],
     [/^Sauvegarde du (.+)$/, (m) => `Backup from ${m[1]}`],

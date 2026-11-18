@@ -29,6 +29,7 @@
         </nav>
         <nav class="filters" id="notesNav">
           <button type="button" id="notesBtn" title="Notes"><span class="ico" data-icon="note"></span><span class="lbl">Notes</span><span class="count" id="c-notes">0</span></button>
+          <button type="button" id="gradesBtn" title="Notes /20 et moyennes"><span class="ico" data-icon="star"></span><span class="lbl">Notes /20</span><span class="count" id="c-grades" title="Moyenne générale">–</span></button>
         </nav>
       </div>
 
@@ -162,6 +163,30 @@
           </section>
         </div>
       </section>
+
+      <!-- Onglet Notes /20 : notes chiffrées, moyennes par matière et moyenne générale (remplace le reste de la page quand il est ouvert) -->
+      <section id="gradesPage" class="grades-page" hidden>
+        <header class="page-head">
+          <div>
+            <h2>Notes /20</h2>
+            <p class="notes-sub" id="gradesSub"></p>
+          </div>
+          <div class="head-actions">
+            <button type="button" class="primary" id="gradeNew" title="Ajouter une note"><span class="ico" data-icon="plus"></span>Ajouter une note</button>
+          </div>
+        </header>
+        <div class="grades-body">
+          <div class="g-tiles" id="gTiles"></div>
+          <section class="g-chart" id="gChart" hidden></section>
+          <div id="gSubjects"></div>
+          <div class="g-empty" id="gEmpty" hidden>
+            <span class="ico" data-icon="star"></span>
+            <p class="ne-title">Aucune note pour l'instant.</p>
+            <p class="ne-hint">Ajoute ta première note : la moyenne de chaque matière et ta moyenne générale se calculent toutes seules. Les notes de tes contrôles et exposés apparaissent ici aussi.</p>
+            <button type="button" class="primary" id="gradeEmptyNew"><span class="ico" data-icon="plus"></span>Ajouter une note</button>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -292,6 +317,57 @@
       <div class="actions">
         <button type="button" class="ghost" id="cancelBtn">Annuler</button>
         <button type="submit" class="primary" id="saveBtn">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Ajouter / modifier une note /20 -->
+  <dialog id="gradeDlg" class="editdlg grade-dlg">
+    <form method="dialog" id="gradeForm" autocomplete="off">
+      <div class="dlg-head">
+        <h2 id="gradeDlgTitle">Ajouter une note</h2>
+        <button type="button" class="icon-btn tiny" id="g-close" aria-label="Fermer"><span class="ico" data-icon="x"></span></button>
+      </div>
+      <div class="dlg-body">
+        <label class="field">
+          <span class="flabel">Matière</span>
+          <select id="g-subject"></select>
+        </label>
+        <label class="field">
+          <span class="flabel">Titre</span>
+          <input type="text" id="g-title" maxlength="120" placeholder="Ex : DS chapitre 3">
+        </label>
+        <div class="field">
+          <span class="flabel">Note obtenue</span>
+          <div class="grade-line">
+            <input type="number" id="g-value" min="0" max="1500" step="0.25" inputmode="decimal" placeholder="14" aria-label="Note obtenue">
+            <span>/</span>
+            <input type="number" id="g-max" min="1" max="1000" step="1" inputmode="decimal" placeholder="20" aria-label="Note maximale">
+            <span class="g-preview" id="g-preview" aria-live="polite"></span>
+          </div>
+          <span class="hint">Pas sur 20 ? Mets le barème (ex : 7 sur 10) : la note est ramenée sur 20 automatiquement.</span>
+        </div>
+        <div class="two-col">
+          <label class="field">
+            <span class="flabel">Coefficient</span>
+            <input type="number" id="g-coef" min="0" max="100" step="0.5" inputmode="decimal" placeholder="1">
+          </label>
+          <label class="field">
+            <span class="flabel">Date</span>
+            <input type="date" id="g-date">
+          </label>
+        </div>
+        <label class="field">
+          <span class="flabel">Commentaire</span>
+          <textarea id="g-comment" rows="2" maxlength="500" placeholder="Appréciation du prof, points à revoir…"></textarea>
+        </label>
+        <p class="hint g-error" id="g-error" role="alert" hidden></p>
+      </div>
+      <div class="actions">
+        <button type="button" class="ghost danger g-del" id="g-delete" hidden><span class="ico" data-icon="trash"></span>Supprimer</button>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="g-cancel">Annuler</button>
+        <button type="submit" class="primary" id="g-save">Enregistrer</button>
       </div>
     </form>
   </dialog>
@@ -826,6 +902,7 @@
   <script src="dashboard.js"></script>
   <script src="extras.js"></script>
   <script src="notes.js"></script>
+  <script src="grades.js"></script>
   <script src="ui.js"></script>
 </body>
 </html>
